@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "GameForge AI"
+version = "1.0.0"
+id = "artifacts/gameforge-ai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26221
+
+[services.development]
+run = "pnpm --filter @workspace/gameforge-ai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gameforge-ai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gameforge-ai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26221"
+BASE_PATH = "/"

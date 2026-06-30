@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: games
+    description: Game generation operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /games/generate:
+    post:
+      operationId: generateGame
+      tags: [games]
+      summary: Generate a playable browser game
+      description: Uses Claude AI to generate a Phaser.js game based on user description and genre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GameRequest"
+      responses:
+        "200":
+          description: Generated game code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +66,36 @@ components:
           type: string
       required:
         - status
-
+    GameRequest:
+      type: object
+      required:
+        - prompt
+        - genre
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          description: Description of the game to generate
+        genre:
+          type: string
+          enum: [Platformer, Horror, Shooter, Puzzle, Racing, RPG]
+          description: Genre of the game
+    GameResponse:
+      type: object
+      required:
+        - gameCode
+        - title
+      properties:
+        gameCode:
+          type: string
+          description: Complete HTML/JS code for the Phaser.js game
+        title:
+          type: string
+          description: Auto-generated title for the game
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
