@@ -10,9 +10,9 @@ import {
   useGetGame,
   useUpdateGame,
   usePublishGame,
-  useChatEditGame,
   getGetGameQueryKey,
 } from "@workspace/api-client-react";
+import { streamPost } from "@/lib/streamPost";
 import { Button } from "@/components/ui/button";
 import {
   ResizablePanelGroup,
@@ -628,7 +628,6 @@ export default function GameEditor() {
 
   const updateGame = useUpdateGame();
   const publishGame = usePublishGame();
-  const chatEdit = useChatEditGame();
 
   const generateCoverMutation = useMutation({
     mutationFn: () =>
@@ -902,7 +901,7 @@ export default function GameEditor() {
 
   // ── AI chat send ──────────────────────────────────────────────────────────
   const handleChatSend = useCallback(
-    (text: string) => {
+    async (text: string) => {
       if (!id || isThinking) return;
 
       setMessages((m) => [...m, newMsg("user", text)]);
@@ -916,68 +915,68 @@ export default function GameEditor() {
       setUndoCount(undoStack.current.length);
       setRedoCount(0);
 
-      chatEdit.mutate(
-        { id, data: { message: text, currentCode: codeRef.current } },
-        {
-          onSuccess: (data) => {
-            setIsThinking(false);
-            const updated = data.updatedCode;
+      try {
+        const data = await streamPost<{
+          updatedCode: string;
+          changeSummary?: string;
+          codeVersion: number;
+        }>(`/api/games/${id}/chat`, { message: text, currentCode: codeRef.current });
 
-            // Sanity check — auto-revert if response looks broken
-            if (!updated || updated.length < 200 || !updated.trimStart().startsWith("<")) {
-              undoStack.current.pop();
-              setUndoCount(undoStack.current.length);
-              setMessages((m) => [
-                ...m,
-                newMsg(
-                  "error",
-                  "⚠️ The AI returned invalid code. Your game is unchanged. Please try rephrasing your request.",
-                ),
-              ]);
-              return;
-            }
+        setIsThinking(false);
+        const updated = data.updatedCode;
 
-            // Apply the new code and reload the preview
-            setCode(updated);
-            setPreviewCode(updated);
-            setIframeKey((k) => k + 1);
+        // Sanity check — auto-revert if response looks broken
+        if (!updated || updated.length < 200 || !updated.trimStart().startsWith("<")) {
+          undoStack.current.pop();
+          setUndoCount(undoStack.current.length);
+          setMessages((m) => [
+            ...m,
+            newMsg(
+              "error",
+              "⚠️ The AI returned invalid code. Your game is unchanged. Please try rephrasing your request.",
+            ),
+          ]);
+          return;
+        }
 
-            // Track the new version number returned by the server
-            if (data.codeVersion != null) setCodeVersion(data.codeVersion);
+        // Apply the new code and reload the preview
+        setCode(updated);
+        setPreviewCode(updated);
+        setIframeKey((k) => k + 1);
 
-            // Auto-save the new version
-            doSave(updated, titleRef.current);
+        // Track the new version number returned by the server
+        if (data.codeVersion != null) setCodeVersion(data.codeVersion);
 
-            const summary = data.changeSummary;
-            const successText = summary
-              ? `✓ Done! ${summary}`
-              : "✓ Applied your change and refreshed the preview.";
+        // Auto-save the new version
+        doSave(updated, titleRef.current);
 
-            setMessages((m) => [
-              ...m,
-              newMsg("assistant", successText, true /* undoable */),
-            ]);
-          },
-          onError: (err: any) => {
-            setIsThinking(false);
-            // No change was made — pop the undo entry we optimistically added
-            undoStack.current.pop();
-            setUndoCount(undoStack.current.length);
+        const summary = data.changeSummary;
+        const successText = summary
+          ? `✓ Done! ${summary}`
+          : "✓ Applied your change and refreshed the preview.";
 
-            const detail =
-              err?.error || err?.message || "The AI couldn't apply that change.";
-            setMessages((m) => [
-              ...m,
-              newMsg(
-                "error",
-                `❌ ${detail}\n\nTry rephrasing, or be more specific about what you want to change.`,
-              ),
-            ]);
-          },
-        },
-      );
+        setMessages((m) => [
+          ...m,
+          newMsg("assistant", successText, true /* undoable */),
+        ]);
+      } catch (err: any) {
+        setIsThinking(false);
+        // No change was made — pop the undo entry we optimistically added
+        undoStack.current.pop();
+        setUndoCount(undoStack.current.length);
+
+        const detail =
+          err?.error || err?.message || "The AI couldn't apply that change.";
+        setMessages((m) => [
+          ...m,
+          newMsg(
+            "error",
+            `❌ ${detail}\n\nTry rephrasing, or be more specific about what you want to change.`,
+          ),
+        ]);
+      }
     },
-    [id, isThinking, chatEdit, doSave],
+    [id, isThinking, doSave],
   );
 
   const handleAddSpriteToGame = useCallback(

@@ -215,7 +215,7 @@ export async function generate3DGame(
 ): Promise<Generate3DResult> {
   const shell = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
   const systemPrompt = GENRE_SYSTEM_PROMPTS[genre] ?? DEFAULT_GENRE_PROMPT;
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = new Anthropic({ apiKey, timeout: 120_000 });
 
   let logic: string;
   try {

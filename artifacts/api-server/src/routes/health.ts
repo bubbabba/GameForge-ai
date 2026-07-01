@@ -8,4 +8,9 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+// Alias used by Replit keep-alive probes and uptime monitors
+router.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 export default router;

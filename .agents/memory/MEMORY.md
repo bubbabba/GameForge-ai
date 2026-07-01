@@ -6,3 +6,4 @@
 - [Chat editor black screen fix](chat-black-screen-fix.md) — Two causes: (1) `<\/script>` escaping in chat route broke srcDoc HTML parsing; (2) max_tokens:8000 truncated large games. Both fixed; validator now also requires `</html>` and checks stop_reason.
 - [Lib rebuild order](lib-rebuild-order.md) — After any schema change: rebuild lib/db → api-zod → api-client-react (tsc -p tsconfig.json each). Then typecheck api-server and gameforge-ai. Never skip db rebuild when gamesTable changes.
 - [Image generation setup](image-generation.md) — Replicate (stability-ai/sdxl) for covers + sprites; GCS via objectStorageClient.bucket().file().save(); zod must be a direct dep of api-server; images are public assets (no ACL on /storage/objects/*).
+- [SSE resilience pattern](sse-resilience.md) — generate + chat routes use SSE with 10s heartbeats; server timeout 180s; Anthropic timeout 120s; streamPost() client utility; useGenerateGame/useChatEditGame removed from frontend.

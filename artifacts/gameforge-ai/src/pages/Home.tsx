@@ -2,11 +2,11 @@ import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
 import {
-  useGenerateGame,
   useSaveGame,
   useListPublicGames,
   getListPublicGamesQueryKey,
 } from "@workspace/api-client-react";
+import { streamPost } from "@/lib/streamPost";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -42,7 +42,8 @@ export default function Home() {
     gamePlan?: string;
   } | null>(null);
 
-  const generateGame = useGenerateGame();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const saveGame = useSaveGame();
 
   const { data: recentGames, isLoading: loadingGames } = useListPublicGames(
@@ -50,9 +51,9 @@ export default function Home() {
     { query: { queryKey: getListPublicGamesQueryKey({ limit: 6 }) } },
   );
 
-  const isBusy = generateGame.isPending || saveGame.isPending;
+  const isBusy = isGenerating || saveGame.isPending;
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast({
         title: "Prompt required",
@@ -63,63 +64,65 @@ export default function Home() {
     }
 
     setGuestPreview(null);
+    setGenerateError(null);
+    setIsGenerating(true);
 
-    generateGame.mutate(
-      { data: { prompt } },
-      {
-        onSuccess: (data) => {
-          const resolvedGenre = data.genre ?? "Platformer";
-          const resolvedEngine = data.engine ?? "2d";
+    try {
+      const data = await streamPost<{
+        gameCode: string;
+        title: string;
+        engine: "2d" | "3d";
+        genre: string;
+        qualityScore?: number;
+        gamePlan?: string;
+      }>("/api/games/generate", { prompt });
 
-          if (isSignedInRef.current) {
-            saveGame.mutate(
-              {
-                data: {
-                  title: data.title,
-                  genre: resolvedGenre,
-                  prompt,
-                  gameCode: data.gameCode,
-                },
-              },
-              {
-                onSuccess: (saved) => {
-                  queryClient.invalidateQueries({ queryKey: ["/api/games/my"] });
-                  if (data.gamePlan) {
-                    sessionStorage.setItem(`gamePlan_${saved.id}`, data.gamePlan);
-                  }
-                  setLocation(`/game/${saved.id}`);
-                },
-                onError: (err: any) => {
-                  toast({
-                    title: "Save failed",
-                    description: err?.error || "Could not auto-save your game.",
-                    variant: "destructive",
-                  });
-                },
-              },
-            );
-          } else {
-            setGuestPreview({
-              gameCode: data.gameCode,
+      const resolvedGenre = data.genre ?? "Platformer";
+      const resolvedEngine = data.engine ?? "2d";
+
+      if (isSignedInRef.current) {
+        saveGame.mutate(
+          {
+            data: {
               title: data.title,
               genre: resolvedGenre,
-              engine: resolvedEngine,
               prompt,
-              qualityScore: data.qualityScore,
-              gamePlan: data.gamePlan,
-            });
-          }
-        },
-        onError: (err: any) => {
-          toast({
-            title: "Generation failed",
-            description:
-              err?.error || "Failed to generate game. Please try again.",
-            variant: "destructive",
-          });
-        },
-      },
-    );
+              gameCode: data.gameCode,
+            },
+          },
+          {
+            onSuccess: (saved) => {
+              queryClient.invalidateQueries({ queryKey: ["/api/games/my"] });
+              if (data.gamePlan) {
+                sessionStorage.setItem(`gamePlan_${saved.id}`, data.gamePlan);
+              }
+              setLocation(`/game/${saved.id}`);
+            },
+            onError: (err: any) => {
+              toast({
+                title: "Save failed",
+                description: err?.error || "Could not auto-save your game.",
+                variant: "destructive",
+              });
+            },
+          },
+        );
+      } else {
+        setGuestPreview({
+          gameCode: data.gameCode,
+          title: data.title,
+          genre: resolvedGenre,
+          engine: resolvedEngine,
+          prompt,
+          qualityScore: data.qualityScore,
+          gamePlan: data.gamePlan,
+        });
+      }
+    } catch (err: any) {
+      setGenerateError(err?.error || "Failed to generate game. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // When a guest signs in after seeing the preview, save + navigate
@@ -200,7 +203,7 @@ export default function Home() {
                 data-testid="create-game-button"
                 className="w-full sm:w-auto shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all"
               >
-                {generateGame.isPending ? (
+                {isGenerating ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Forging…
@@ -221,14 +224,13 @@ export default function Home() {
           </div>
 
           {/* ── Error state ────────────────────────────────────────────────── */}
-          {generateGame.isError && (
+          {generateError && (
             <div
               data-testid="generate-error"
               className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm text-left"
             >
               <span className="font-semibold">Generation failed.</span>{" "}
-              {(generateGame.error as any)?.error ||
-                "Something went wrong — please try again with a different prompt."}
+              {generateError}
             </div>
           )}
         </div>

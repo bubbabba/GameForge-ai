@@ -146,7 +146,7 @@ export async function generate2DGame(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any,
 ): Promise<Generate2DResult> {
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = new Anthropic({ apiKey, timeout: 120_000 });
 
   // ── Step 1: Planning ────────────────────────────────────────────────────────
   logger?.info({ promptLength: prompt.length }, "Step 1: generating game design document");

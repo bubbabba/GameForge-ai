@@ -25,6 +25,45 @@ const router: IRouter = Router();
 
 const MAX_PROMPT_LENGTH = 4000;
 
+// ── SSE helpers ───────────────────────────────────────────────────────────────
+// Switch a response to Server-Sent Events and keep the connection alive with
+// a heartbeat ping every 10 seconds. Returns a cleanup function.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function startSSE(res: any): () => void {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx/CDN buffering
+  res.flushHeaders();
+  const timer = setInterval(() => {
+    try { res.write('data: {"type":"thinking"}\n\n'); } catch { /* connection already closed */ }
+  }, 10_000);
+  return () => clearInterval(timer);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sseResult(res: any, data: Record<string, unknown>): void {
+  res.write(`data: ${JSON.stringify({ type: "result", ...data })}\n\n`);
+  res.end();
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sseError(res: any, message: string): void {
+  res.write(`data: ${JSON.stringify({ type: "error", error: message })}\n\n`);
+  res.end();
+}
+
+// ── Retry wrapper ─────────────────────────────────────────────────────────────
+// Retries once on transient failures; does not retry auth or validation errors.
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: any) {
+    if (err?.status === 401 || err?.status === 400) throw err;
+    return await fn();
+  }
+}
+
 function generateSlug(title: string): string {
   const base = title
     .toLowerCase()
@@ -118,18 +157,24 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
   req.log.info({ genre, engine, promptLength: prompt.length }, "Generating game with Claude (auto-classified)");
 
+  // All validation passed — switch to SSE so the connection stays alive
+  // during the long Claude generation (heartbeat every 10 s).
+  const stopHeartbeat = startSSE(res);
+  // Guarantee cleanup if the client disconnects before we finish
+  res.on("close", stopHeartbeat);
+
   try {
-    // ── 3D path: inject Claude logic into a hardcoded Three.js shell ──────
     if (is3D) {
-      const result = await generate3DGame(apiKey, prompt, genre, req.log);
+      const result = await withRetry(() => generate3DGame(apiKey, prompt, genre, req.log));
       req.log.info({ title: result.title }, "3D game generated successfully");
-      res.json({ ...result, engine, genre });
+      stopHeartbeat();
+      sseResult(res, { ...result, engine, genre });
       return;
     }
 
-    // ── 2D path: two-step Phaser.js generation ────────────────────────────
-    const result = await generate2DGame(apiKey, prompt, genre, req.log);
-    res.json({
+    const result = await withRetry(() => generate2DGame(apiKey, prompt, genre, req.log));
+    stopHeartbeat();
+    sseResult(res, {
       gameCode: result.gameCode,
       title: result.title,
       engine,
@@ -138,17 +183,13 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       gamePlan: result.gamePlan,
     });
   } catch (err) {
+    stopHeartbeat();
     const error = err as Error & { status?: number };
     req.log.error({ err }, "Claude API call failed");
-    if (error.status === 401) {
-      res.status(500).json({ error: "Invalid Claude API key." });
-      return;
-    }
-    if (error.status === 429) {
-      res.status(500).json({ error: "Claude rate limit reached. Please wait a moment and try again." });
-      return;
-    }
-    res.status(500).json({ error: error.message ?? "Game generation failed. Please try again." });
+    let message = error.message ?? "Game generation failed. Please try again.";
+    if (error.status === 401) message = "Invalid Claude API key.";
+    else if (error.status === 429) message = "Claude rate limit reached. Please wait a moment and try again.";
+    sseError(res, message);
   }
 });
 
@@ -570,11 +611,17 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     "AI chat edit requested",
   );
 
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = new Anthropic({ apiKey, timeout: 120_000 });
   const userPrompt = `Here is the current game code:\n\n${codeContext}\n\n---\n\nThe user wants this change: ${message}\n\nMake this specific change and return the complete updated working HTML game code only:`;
 
-  try {
-    // ── Attempt 1 ────────────────────────────────────────────────────────────
+  // All validation passed — switch to SSE so the connection stays alive
+  const stopHeartbeat = startSSE(res);
+  // Guarantee cleanup if the client disconnects before we finish
+  res.on("close", stopHeartbeat);
+
+  // Inner function that runs both Claude attempts and returns the final HTML
+  async function runChatEdit(): Promise<{ html: string; changeSummary: string | undefined }> {
+    // ── Attempt 1 ──────────────────────────────────────────────────────────
     const r1 = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 16000,
@@ -585,48 +632,45 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     const rawFull1 = r1.content[0]?.type === "text" ? r1.content[0].text.trim() : "";
     const { html: html1, changeSummary: cs1 } = extractHtmlAndSummary(rawFull1);
 
-    // Treat a token-limit cut-off as an immediate validation failure
     const truncated1 = r1.stop_reason === "max_tokens";
     let failure = truncated1 ? "Response was cut off (output too long)" : validateChatHtml(html1, isPhaser);
-    let finalHtml = html1;
-    let finalChangeSummary = cs1;
 
-    // ── Attempt 2 — correction round-trip if Attempt 1 failed ───────────────
+    if (!failure) return { html: html1, changeSummary: cs1 };
+
+    // ── Attempt 2 — correction round-trip ──────────────────────────────────
+    req.log.warn({ gameId: params.data?.id, failure }, "Chat attempt 1 invalid — sending correction");
+
+    const r2 = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 16000,
+      temperature: 0.9,
+      system: CHAT_SYSTEM_PROMPT,
+      messages: [
+        { role: "user", content: userPrompt },
+        { role: "assistant", content: rawFull1 },
+        {
+          role: "user",
+          content: `That code was invalid. Here is what was wrong: ${failure}. Please fix it and return the complete working HTML game code.`,
+        },
+      ],
+    });
+    const rawFull2 = r2.content[0]?.type === "text" ? r2.content[0].text.trim() : "";
+    const { html: html2, changeSummary: cs2 } = extractHtmlAndSummary(rawFull2);
+
+    const truncated2 = r2.stop_reason === "max_tokens";
+    failure = truncated2 ? "Response was cut off (output too long)" : validateChatHtml(html2, isPhaser);
+
     if (failure) {
-      req.log.warn({ gameId: params.data.id, failure }, "Chat attempt 1 invalid — sending correction");
-
-      const r2 = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 16000,
-        temperature: 0.9,
-        system: CHAT_SYSTEM_PROMPT,
-        messages: [
-          { role: "user", content: userPrompt },
-          { role: "assistant", content: rawFull1 },
-          {
-            role: "user",
-            content: `That code was invalid. Here is what was wrong: ${failure}. Please fix it and return the complete working HTML game code.`,
-          },
-        ],
-      });
-      const rawFull2 = r2.content[0]?.type === "text" ? r2.content[0].text.trim() : "";
-      const { html: html2, changeSummary: cs2 } = extractHtmlAndSummary(rawFull2);
-
-      const truncated2 = r2.stop_reason === "max_tokens";
-      failure = truncated2 ? "Response was cut off (output too long)" : validateChatHtml(html2, isPhaser);
-      finalHtml = html2;
-      finalChangeSummary = cs2;
-
-      if (failure) {
-        req.log.error({ gameId: params.data.id, failure }, "Chat correction also invalid — rejecting change");
-        res.status(422).json({
-          error: `Could not apply this change after 2 attempts (${failure}). Your game is unchanged — try rephrasing your request.`,
-        });
-        return;
-      }
+      req.log.error({ gameId: params.data!.id, failure }, "Chat correction also invalid — rejecting change");
+      throw new Error(`Could not apply this change after 2 attempts (${failure}). Your game is unchanged — try rephrasing your request.`);
     }
+    return { html: html2, changeSummary: cs2 };
+  }
 
-    // ── Persist to DB ─────────────────────────────────────────────────────────
+  try {
+    const { html: finalHtml, changeSummary: finalChangeSummary } = await withRetry(runChatEdit);
+
+    // ── Persist to DB ───────────────────────────────────────────────────────
     const updatedCode = finalHtml;
     const newVersion = (game.codeVersion ?? 0) + 1;
 
@@ -639,10 +683,12 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
       { gameId: params.data.id, chars: updatedCode.length, codeVersion: newVersion },
       "AI chat edit applied",
     );
-    res.json({ updatedCode, changeSummary: finalChangeSummary, codeVersion: newVersion });
+    stopHeartbeat();
+    sseResult(res, { updatedCode, changeSummary: finalChangeSummary, codeVersion: newVersion });
   } catch (err: any) {
+    stopHeartbeat();
     req.log.error({ err, gameId: params.data.id }, "AI chat edit failed");
-    res.status(500).json({ error: "AI edit failed. Please try again." });
+    sseError(res, err?.message ?? "AI edit failed. Please try again.");
   }
 });
 
