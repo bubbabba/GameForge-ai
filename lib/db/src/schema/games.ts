@@ -21,6 +21,10 @@ export const gamesTable = pgTable("games", {
   coverImageUrl: text("cover_image_url"),
   /** JSON array of auto-generated sprites: { name, url, objectPath, description }[] */
   spritesJson: text("sprites_json"),
+  /** Game design document written by Claude in Step 1 of generation */
+  gamePlan: text("game_plan"),
+  /** Serialized GameContext JSON — setting, player, enemies, art style, palette, mood */
+  gameContext: text("game_context"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

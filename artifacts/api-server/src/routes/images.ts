@@ -43,6 +43,7 @@ router.post("/games/:id/generate-cover", requireAuth, async (req: any, res): Pro
       authorId: gamesTable.authorId,
       title: gamesTable.title,
       genre: gamesTable.genre,
+      gameContext: gamesTable.gameContext,
     })
     .from(gamesTable)
     .where(and(eq(gamesTable.id, params.data.id), eq(gamesTable.authorId, req.userId)));
@@ -53,7 +54,8 @@ router.post("/games/:id/generate-cover", requireAuth, async (req: any, res): Pro
   }
 
   try {
-    const coverImageUrl = await generateAndSaveCover(game.id, game.title, game.genre);
+    // Pass stored gameContext so the cover matches the actual game world
+    const coverImageUrl = await generateAndSaveCover(game.id, game.title, game.genre, game.gameContext);
     req.log.info({ gameId: game.id }, "Cover generated and saved");
     res.json({ coverImageUrl });
   } catch (err: any) {
@@ -85,9 +87,13 @@ router.post("/games/:id/generate-sprite", requireAuth, async (req: any, res): Pr
     return;
   }
 
-  // Verify game ownership
+  // Fetch game context so the new sprite matches the original game world
   const [game] = await db
-    .select({ id: gamesTable.id, authorId: gamesTable.authorId })
+    .select({
+      id: gamesTable.id,
+      authorId: gamesTable.authorId,
+      gameContext: gamesTable.gameContext,
+    })
     .from(gamesTable)
     .where(and(eq(gamesTable.id, params.data.id), eq(gamesTable.authorId, req.userId)));
 
@@ -97,7 +103,8 @@ router.post("/games/:id/generate-sprite", requireAuth, async (req: any, res): Pr
   }
 
   try {
-    const spriteUrl = await generateSprite(body.data.description);
+    // Include full game context so regenerated sprite fits the original world
+    const spriteUrl = await generateSprite(body.data.description, game.gameContext);
     req.log.info({ gameId: game.id }, "Sprite generated");
     res.json({ spriteUrl });
   } catch (err: any) {

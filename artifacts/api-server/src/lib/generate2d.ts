@@ -11,7 +11,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { generateGameSprites, type GeneratedSprite } from "./generateGameSprites";
+import { generateGameSprites, type GeneratedSprite, type GameContext } from "./generateGameSprites";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -202,6 +202,7 @@ export interface Generate2DResult {
   gamePlan: string;
   sprites: GeneratedSprite[];
   backgroundSprite: GeneratedSprite | null;
+  gameContext: import("./generateGameSprites").GameContext | null;
 }
 
 export async function generate2DGame(
@@ -245,16 +246,18 @@ export async function generate2DGame(
 
   // ── Step 1b: Sprite generation (parallel with Step 2 setup) ────────────────
   let spriteManifest: SpriteManifest | undefined;
+  let gameContext: GameContext | null = null;
 
   if (process.env.REPLICATE_API_KEY) {
     try {
-      const { sprites, backgroundSprite } = await generateGameSprites(
+      const { sprites, backgroundSprite, context } = await generateGameSprites(
         apiKey,
         gamePlan,
         prompt,
         emitStatus,
       );
       spriteManifest = { sprites, background: backgroundSprite };
+      gameContext = context;
       logger?.info({ spriteCount: sprites.length, hasBackground: !!backgroundSprite }, "Sprites generated");
     } catch (err) {
       logger?.warn({ err }, "Sprite generation failed — falling back to graphics primitives");
@@ -322,5 +325,6 @@ export async function generate2DGame(
     gamePlan,
     sprites: spriteManifest?.sprites ?? [],
     backgroundSprite: spriteManifest?.background ?? null,
+    gameContext,
   };
 }

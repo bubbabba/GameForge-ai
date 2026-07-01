@@ -83,6 +83,10 @@ export interface Game {
   coverImageUrl?: string | null;
   /** JSON array of auto-generated sprites: {name, url, description}[] */
   spritesJson?: string | null;
+  /** Game design document written by Claude before building the game */
+  gamePlan?: string | null;
+  /** Serialized GameContext JSON used to keep all images consistent with the game world */
+  gameContext?: string | null;
   status: GameStatus;
   slug: string;
   likesCount: number;
@@ -119,6 +123,8 @@ export interface GameInput {
   prompt: string;
   gameCode: string;
   spritesJson?: string | null;
+  gamePlan?: string | null;
+  gameContext?: string | null;
 }
 
 export interface GamePatch {

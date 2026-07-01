@@ -188,6 +188,7 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       gamePlan: result.gamePlan,
       sprites: result.sprites,
       backgroundSprite: result.backgroundSprite,
+      gameContextJson: result.gameContext ? JSON.stringify(result.gameContext) : undefined,
     });
   } catch (err) {
     stopHeartbeat();
@@ -298,9 +299,9 @@ router.post("/games", requireAuth, async (req: any, res): Promise<void> => {
 
   res.status(201).json(game);
 
-  // Fire-and-forget cover generation — does not block the response
+  // Fire-and-forget cover generation — pass gameContext so the cover matches the game world
   if (process.env.REPLICATE_API_KEY) {
-    generateAndSaveCover(game.id, game.title, game.genre).catch((err: unknown) => {
+    generateAndSaveCover(game.id, game.title, game.genre, game.gameContext ?? undefined).catch((err: unknown) => {
       req.log.warn({ err, gameId: game.id }, "Auto cover generation failed (non-blocking)");
     });
   }

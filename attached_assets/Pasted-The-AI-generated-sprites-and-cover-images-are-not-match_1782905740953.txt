@@ -1,0 +1,30 @@
+The AI generated sprites and cover images are not matching the actual game content. Fix this so every image is directly tied to what was actually generated in the game.
+The problem:
+Currently the image prompts are too generic and not connected to the actual game code and design document Claude created. Fix this by using the game design document Claude wrote in Step 1 of generation to inform every single image prompt.
+New image generation flow:
+After Claude writes the game design document in Step 1, extract these specific details and use them in every image prompt:
+
+Exact game setting (dark forest, space station, underwater cave etc)
+Exact player character description (robot, knight, astronaut etc)
+Exact enemy descriptions (zombie, alien, demon etc)
+Exact art style Claude decided on (dark and gritty, cute and colorful, retro pixel etc)
+Exact color palette Claude chose
+Overall mood and tone of the game
+
+Player sprite prompt must include:
+'pixel art sprite of [EXACT PLAYER DESCRIPTION FROM DESIGN DOC], in a [EXACT SETTING] environment, [EXACT COLOR PALETTE] colors, [EXACT MOOD] tone, transparent background, game sprite sheet, high quality pixel art, 64x64'
+Enemy/monster sprite prompt must include:
+'pixel art sprite of [EXACT ENEMY DESCRIPTION FROM DESIGN DOC], [EXACT MONSTER ABILITIES AND BEHAVIORS] reflected in visual design, fits in a [EXACT SETTING], [EXACT COLOR PALETTE] colors, [EXACT MOOD] atmosphere, transparent background, menacing, detailed, 64x64'
+Background image prompt must include:
+'[EXACT SETTING FROM DESIGN DOC], [EXACT VISUAL STYLE], [EXACT COLOR PALETTE], atmospheric game background, [EXACT MOOD], detailed environment, no characters, no UI, 800x600, pixel art'
+Game cover prompt must include:
+'Professional game cover art for a game called [GAME TITLE], set in [EXACT SETTING], featuring [EXACT PLAYER CHARACTER] facing [EXACT MAIN ENEMY], [EXACT COLOR PALETTE] color scheme, [EXACT MOOD] atmosphere, dramatic lighting, cinematic composition, game cover style, high quality digital art, 16:9'
+Collectibles and items prompt must include:
+'pixel art game item, [EXACT ITEM DESCRIPTION FROM DESIGN DOC], fits the theme of [EXACT SETTING], [EXACT COLOR PALETTE], transparent background, glowing effect, 64x64'
+Important consistency rule:
+Store the full game design document and extracted details in the database alongside the game. Every single image generated for that game — covers, sprites, UI elements — must reference those same stored details so everything looks like it belongs to the same game world.
+Add a style consistency check:
+After generating all sprites, send Claude a final check:
+'Here are the descriptions of all sprites generated for this game: [LIST]. Do they all fit together visually and thematically with this game design: [DESIGN DOC]? If any feel out of place, flag them so they can be regenerated'
+For the editor regenerate button:
+When a user regenerates a sprite, always include the full game context in the new prompt, not just the element description. The regenerated sprite must still fit the overall game world."

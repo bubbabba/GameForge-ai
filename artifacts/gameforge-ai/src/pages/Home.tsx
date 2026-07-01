@@ -40,6 +40,8 @@ export default function Home() {
     prompt: string;
     qualityScore?: number;
     gamePlan?: string;
+    spritesJson?: string;
+    gameContextJson?: string;
   } | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -77,6 +79,7 @@ export default function Home() {
         genre: string;
         qualityScore?: number;
         gamePlan?: string;
+        gameContextJson?: string;
         sprites?: Array<{ name: string; objectPath: string; url: string; description: string }>;
         backgroundSprite?: { name: string; objectPath: string; url: string; description: string } | null;
       }>("/api/games/generate", { prompt }, (msg) => setStatusMessage(msg));
@@ -100,6 +103,8 @@ export default function Home() {
               prompt,
               gameCode: data.gameCode,
               spritesJson,
+              gamePlan: data.gamePlan,
+              gameContext: data.gameContextJson,
             },
           },
           {
@@ -128,6 +133,8 @@ export default function Home() {
           prompt,
           qualityScore: data.qualityScore,
           gamePlan: data.gamePlan,
+          spritesJson,
+          gameContextJson: data.gameContextJson,
         });
       }
     } catch (err: any) {
@@ -148,6 +155,9 @@ export default function Home() {
           genre: guestPreview.genre,
           prompt: guestPreview.prompt,
           gameCode: guestPreview.gameCode,
+          spritesJson: guestPreview.spritesJson,
+          gamePlan: guestPreview.gamePlan,
+          gameContext: guestPreview.gameContextJson,
         },
       },
       {

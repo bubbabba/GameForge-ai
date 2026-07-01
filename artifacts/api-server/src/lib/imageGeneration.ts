@@ -2,6 +2,7 @@ import Replicate from "replicate";
 import { eq } from "drizzle-orm";
 import { db, gamesTable } from "@workspace/db";
 import { uploadImageFromUrl } from "./imageStorage";
+import type { GameContext } from "./generateGameSprites";
 
 function getReplicateClient(): Replicate {
   const apiKey = process.env.REPLICATE_API_KEY;
@@ -23,18 +24,36 @@ async function runFlux(
   return typeof first === "string" ? first : String(first);
 }
 
+/** Parse gameContext JSON string into a GameContext object. Returns null on failure. */
+function parseGameContext(gameContextJson: string | null | undefined): GameContext | null {
+  if (!gameContextJson) return null;
+  try { return JSON.parse(gameContextJson) as GameContext; } catch { return null; }
+}
+
 /**
  * Generate a game cover via Replicate Flux Schnell, upload to GCS, and persist
  * the objectPath to games.coverImageUrl.  Returns the new objectPath.
+ *
+ * When gameContextJson is provided the prompt is fully grounded in the GDD —
+ * exact setting, characters, palette and mood Claude chose for the game.
  */
 export async function generateAndSaveCover(
   gameId: number,
   title: string,
   genre: string,
+  gameContextJson?: string | null,
 ): Promise<string> {
   const replicate = getReplicateClient();
 
-  const prompt = `Epic dramatic game cover art for a video game called "${title}", ${genre} genre. Cinematic dark atmosphere, moody lighting, professional digital painting, ultra-detailed, no text, no letters, no watermarks, landscape widescreen`;
+  const ctx = parseGameContext(gameContextJson);
+  let prompt: string;
+
+  if (ctx) {
+    const mainEnemy = ctx.enemyDescriptions[0] ?? "enemies";
+    prompt = `Professional game cover art for a game called "${title}", set in ${ctx.setting}, featuring ${ctx.playerDescription} facing ${mainEnemy}, ${ctx.colorPalette} color scheme, ${ctx.mood} atmosphere, dramatic lighting, cinematic composition, game cover style, high quality digital art, 16:9, no text, no letters, no watermarks`;
+  } else {
+    prompt = `Epic dramatic game cover art for a video game called "${title}", ${genre} genre. Cinematic dark atmosphere, moody lighting, professional digital painting, ultra-detailed, no text, no letters, no watermarks, landscape widescreen`;
+  }
 
   const imageUrl = await runFlux(replicate, {
     prompt,
@@ -58,11 +77,24 @@ export async function generateAndSaveCover(
 /**
  * Generate a pixel-art sprite via Replicate Flux Schnell and upload to GCS.
  * Returns the objectPath (e.g. "/objects/images/{uuid}").
+ *
+ * When gameContextJson is provided the prompt matches the game's exact world —
+ * setting, art style, palette and mood from the original GDD.
  */
-export async function generateSprite(description: string): Promise<string> {
+export async function generateSprite(
+  description: string,
+  gameContextJson?: string | null,
+): Promise<string> {
   const replicate = getReplicateClient();
 
-  const prompt = `pixel art sprite of ${description}, retro video game style, clean pixel art, bright bold colors, simple design, game character sprite sheet, transparent-style white background`;
+  const ctx = parseGameContext(gameContextJson);
+  let prompt: string;
+
+  if (ctx) {
+    prompt = `pixel art sprite of ${description}, fits the theme of ${ctx.setting}, ${ctx.artStyle}, ${ctx.colorPalette} colors, ${ctx.mood} tone, transparent background, game character sprite, high quality pixel art, 64x64`;
+  } else {
+    prompt = `pixel art sprite of ${description}, retro video game style, clean pixel art, bright bold colors, simple design, game character sprite sheet, transparent-style white background`;
+  }
 
   const imageUrl = await runFlux(replicate, {
     prompt,

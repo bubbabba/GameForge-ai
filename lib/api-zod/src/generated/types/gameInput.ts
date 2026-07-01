@@ -13,4 +13,6 @@ export interface GameInput {
   prompt: string;
   gameCode: string;
   spritesJson?: string | null;
+  gamePlan?: string | null;
+  gameContext?: string | null;
 }
