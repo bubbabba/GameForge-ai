@@ -8,4 +8,5 @@
 
 export interface GameChatResponse {
   updatedCode: string;
+  changeSummary?: string;
 }

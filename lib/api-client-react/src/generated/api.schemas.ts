@@ -122,6 +122,7 @@ export interface GameChatRequest {
 
 export interface GameChatResponse {
   updatedCode: string;
+  changeSummary?: string;
 }
 
 export interface LikeResult {

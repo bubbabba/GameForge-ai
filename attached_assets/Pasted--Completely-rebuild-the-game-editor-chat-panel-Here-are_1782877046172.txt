@@ -1,0 +1,76 @@
+"Completely rebuild the game editor chat panel. Here are the exact changes:
+Layout change — move chat to the side:
+
+Remove the chat from the bottom of the screen
+New layout should be:
+
+Left sidebar: file explorer and game settings
+Center: live game preview taking up most of the screen
+Right panel: split into two halves vertically
+
+Top half: code editor with syntax highlighting showing current game code
+Bottom half: AI chat panel for editing the game
+
+
+
+
+The right panel should be resizable by dragging the divider
+The chat and code editor should always be visible at the same time as the game preview
+
+Completely rebuild how the chat editor works:
+Current problems to fix:
+
+Changes dont apply properly to the running game
+Claude loses context of the game after a few messages
+Changes sometimes break the whole game
+The chat feels slow and unresponsive
+
+New chat system:
+
+Every single message Claude receives must include the FULL current game code as context, not just the original code
+After every successful change, immediately update the stored code so the next message has the latest version
+The game preview must fully reload after every change, not just refresh
+Show a typing indicator while Claude is thinking
+Show exactly what Claude changed after each message like: 'Done! I increased player speed from 200 to 350 and added a double jump on pressing W'
+If a change breaks the game, automatically revert to the last working version and tell the user what went wrong
+
+Make the chat smarter:
+Send Claude this system prompt for every edit message:
+'You are an expert game developer who built this specific game. You have complete understanding of every line of code. When the user asks for a change:
+
+Think about how the change fits into the existing code structure
+Make the change in a way that feels polished and fun, not just the minimum edit
+If the user asks for something vague like make it better or make it more fun, use your judgment to add something genuinely interesting
+If the user asks for something that would break the game, do it in a safe way and explain what you did differently
+Always return the complete full game code with the change applied
+After the code, write one line starting with CHANGE: describing what you did
+Never return partial code. Never use placeholders. Always return a complete working game.'
+
+Add these buttons above the chat:
+
+Undo last change — reverts to previous version of the code
+Redo — goes forward again after undo
+Reset to original — goes back to the very first generated version
+Copy code — copies current code to clipboard
+Full screen preview — makes the game preview take up the whole screen temporarily
+
+Add these quick action suggestion buttons in the chat:
+Show these as clickable chips above the chat input that the user can tap instead of typing:
+
+Make it harder
+Add power up
+Make it faster
+Add new enemy
+Change colors
+Add sound effects
+Fix any bugs
+Add a second level
+Clicking one sends it as a message automatically
+
+Chat input improvements:
+
+Press Enter to send, Shift+Enter for new line
+Input box should expand as user types
+Show character count
+Add a voice input button that transcribes speech to text so users can describe changes out loud
+Placeholder text should say something like: Describe a change... try adding a double jump or make enemies faster"

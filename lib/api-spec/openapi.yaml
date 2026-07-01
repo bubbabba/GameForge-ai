@@ -545,6 +545,9 @@ components:
       properties:
         updatedCode:
           type: string
+        changeSummary:
+          type: string
+          description: One-sentence description of exactly what Claude changed
 
     LikeResult:
       type: object

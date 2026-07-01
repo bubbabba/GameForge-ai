@@ -399,16 +399,19 @@ router.post("/games/:id/like", requireAuth, async (req: any, res): Promise<void>
 // ── AI Chat Editor ──────────────────────────────────────────────────────────
 
 const CHAT_SYSTEM_PROMPT = [
-  "You are the developer who built this game. The user wants a change.",
-  "You understand the code completely and can modify any part of it.",
-  "Rules:",
-  "- Output ONLY the complete updated HTML document — no prose, no markdown fences (no ```), no explanation before or after",
-  "- The first character of your response must be '<' and the first line must be '<!DOCTYPE html>'",
-  "- Make this specific change and return the complete updated working code only",
-  "- Be creative — do not just make the minimum change, make it feel good and polished",
-  "- Preserve all existing game mechanics unless the user explicitly asks to change them",
-  "- The returned code must be fully playable in a browser sandbox with no external dependencies beyond CDN scripts already present",
-].join(" ");
+  "You are an expert game developer who built this specific game. You have complete understanding of every line of code. When the user asks for a change:",
+  "- Think about how the change fits into the existing code structure",
+  "- Make the change in a way that feels polished and fun, not just the minimum edit",
+  "- If the user asks for something vague like 'make it better' or 'make it more fun', use your judgment to add something genuinely interesting",
+  "- If the user asks for something that would break the game, do it in a safe way and explain what you did differently",
+  "- Always return the complete full game code with the change applied",
+  "- Never return partial code. Never use placeholders. Always return a complete working game.",
+  "",
+  "Output format:",
+  "1. The first character of your response must be '<' and it must start with '<!DOCTYPE html>' — no markdown fences, no prose before the HTML.",
+  "2. Return the complete, working updated HTML game code.",
+  "3. After the closing </html> tag, on a new line write exactly: CHANGE: [one sentence describing precisely what you changed, e.g. 'Increased player speed from 200 to 350 and added a double jump on pressing W']",
+].join("\n");
 
 const MAX_CHAT_MESSAGE_CHARS = 2_000; // reasonable limit for a natural-language edit request
 const MAX_CHAT_CODE_CHARS = 80_000; // ~20k tokens of code context
@@ -478,8 +481,26 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
       ],
     });
 
-    const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
-    if (!raw.startsWith("<")) {
+    const rawFull = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+
+    // Find the last </html> boundary (case-insensitive)
+    const htmlCloseLower = rawFull.toLowerCase().lastIndexOf("</html>");
+    const htmlEnd = htmlCloseLower !== -1 ? htmlCloseLower + 7 : -1;
+
+    // Extract CHANGE: summary ONLY from the tail after </html> — never inside the HTML body
+    let changeSummary: string | undefined;
+    if (htmlEnd !== -1) {
+      const tail = rawFull.slice(htmlEnd).trim();
+      const changeMatch = tail.match(/^CHANGE:\s*(.+)$/m);
+      if (changeMatch?.[1]) {
+        changeSummary = changeMatch[1].trim();
+      }
+    }
+
+    // Extract just the HTML (up to and including the last </html>)
+    const raw = htmlEnd !== -1 ? rawFull.slice(0, htmlEnd) : rawFull.trim();
+
+    if (!raw.trimStart().startsWith("<")) {
       req.log.warn({ gameId: params.data.id }, "AI chat returned non-HTML response");
       res.status(500).json({ error: "AI returned an unexpected response. Please try again." });
       return;
@@ -489,7 +510,7 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     const updatedCode = raw.replace(/<\/script>/gi, "<\\/script>");
 
     req.log.info({ gameId: params.data.id, chars: updatedCode.length }, "AI chat edit applied");
-    res.json({ updatedCode });
+    res.json({ updatedCode, changeSummary });
   } catch (err: any) {
     req.log.error({ err, gameId: params.data.id }, "AI chat edit failed");
     res.status(500).json({ error: "AI edit failed. Please try again." });

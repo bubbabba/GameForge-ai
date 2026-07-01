@@ -15,9 +15,16 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import CodeMirror from "@uiw/react-codemirror";
+import { html as htmlLang } from "@codemirror/lang-html";
+import { oneDark } from "@codemirror/theme-one-dark";
+import {
   Loader2,
   ArrowLeft,
-  Play,
   Save,
   Globe,
   Code2,
@@ -38,6 +45,14 @@ import {
   Shield,
   FolderOpen,
   AlertTriangle,
+  Redo2,
+  RefreshCcw,
+  Copy,
+  Maximize2,
+  Minimize2,
+  Mic,
+  MicOff,
+  X,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -61,14 +76,25 @@ function makeWelcome(gamePlan?: string | null): ChatMessage {
   if (gamePlan) {
     return newMsg(
       "assistant",
-      `Here is what I built:\n\n${gamePlan}\n\n---\nYou can ask me to change anything — try: "make it harder", "add power-ups", "change the colors", "add a new enemy type", or "make the player faster".`,
+      `Here is what I built:\n\n${gamePlan}\n\n---\nAsk me to change anything — try: "make it harder", "add power-ups", "change the colors", "add a new enemy", or "make the player faster".`,
     );
   }
   return newMsg(
     "assistant",
-    "Hi! I'm your game AI. Type a request below and I'll update your game instantly.\n\nTry things like: \"make the player faster\", \"add a double jump\", \"change the background to a forest\", or \"make the enemies harder\".",
+    'Hi! I\'m your game AI. Describe a change and I\'ll update your game instantly.\n\nTry: "make the player faster", "add a double jump", "change the background to a forest", or "make the enemies harder".',
   );
 }
+
+const QUICK_CHIPS = [
+  "Make it harder",
+  "Add power up",
+  "Make it faster",
+  "Add new enemy",
+  "Change colors",
+  "Add sound effects",
+  "Fix any bugs",
+  "Add a second level",
+];
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar() {
@@ -77,16 +103,11 @@ function Sidebar() {
 
   return (
     <aside className="w-44 shrink-0 bg-[#111] border-r border-white/10 flex flex-col text-xs overflow-y-auto">
-      {/* Files */}
       <button
         onClick={() => setFilesOpen((o) => !o)}
         className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors w-full"
       >
-        {filesOpen ? (
-          <ChevronDown className="w-3 h-3" />
-        ) : (
-          <ChevronRight className="w-3 h-3" />
-        )}
+        {filesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Files
       </button>
       {filesOpen && (
@@ -104,41 +125,31 @@ function Sidebar() {
 
       <div className="border-t border-white/10 mx-2" />
 
-      {/* Settings */}
       <button
         onClick={() => setSettingsOpen((o) => !o)}
         className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors w-full"
       >
-        {settingsOpen ? (
-          <ChevronDown className="w-3 h-3" />
-        ) : (
-          <ChevronRight className="w-3 h-3" />
-        )}
+        {settingsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Settings
       </button>
       {settingsOpen && (
-        <div className="px-3 pb-3 space-y-3">
-          <div>
-            <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">
-              Ask AI to change
-            </p>
-            {[
-              { icon: Palette, label: "Theme & Colors" },
-              { icon: Volume2, label: "Sound & Music" },
-              { icon: Shield, label: "Difficulty" },
-              { icon: Zap, label: "Physics" },
-              { icon: Settings2, label: "Controls" },
-            ].map(({ icon: Icon, label }) => (
-              <button
-                key={label}
-                className="w-full flex items-center gap-2 px-2 py-1 rounded text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors"
-                title={`Ask AI: change ${label.toLowerCase()}`}
-              >
-                <Icon className="w-3 h-3 shrink-0" />
-                <span className="truncate">{label}</span>
-              </button>
-            ))}
-          </div>
+        <div className="px-3 pb-3 space-y-1">
+          <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1 pt-1">Ask AI to change</p>
+          {[
+            { icon: Palette, label: "Theme & Colors" },
+            { icon: Volume2, label: "Sound & Music" },
+            { icon: Shield, label: "Difficulty" },
+            { icon: Zap, label: "Physics" },
+            { icon: Settings2, label: "Controls" },
+          ].map(({ icon: Icon, label }) => (
+            <button
+              key={label}
+              className="w-full flex items-center gap-2 px-2 py-1 rounded text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors"
+            >
+              <Icon className="w-3 h-3 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -151,13 +162,20 @@ function Sidebar() {
   );
 }
 
-// ── Chat panel ────────────────────────────────────────────────────────────────
+// ── Chat Panel ────────────────────────────────────────────────────────────────
 interface ChatPanelProps {
   messages: ChatMessage[];
   isThinking: boolean;
   onSend: (text: string) => void;
   onUndo: () => void;
+  onRedo: () => void;
+  onReset: () => void;
+  onCopyCode: () => void;
+  onToggleFullscreen: () => void;
   canUndo: boolean;
+  canRedo: boolean;
+  canReset: boolean;
+  isFullscreen: boolean;
 }
 
 function ChatPanel({
@@ -165,22 +183,43 @@ function ChatPanel({
   isThinking,
   onSend,
   onUndo,
+  onRedo,
+  onReset,
+  onCopyCode,
+  onToggleFullscreen,
   canUndo,
+  canRedo,
+  canReset,
+  isFullscreen,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [isListening, setIsListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking]);
+
+  // Auto-resize textarea as user types
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }, [input]);
 
   const handleSend = () => {
     const text = input.trim();
     if (!text || isThinking) return;
     setInput("");
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
     onSend(text);
-    // Re-focus after send
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
@@ -191,8 +230,44 @@ function ChatPanel({
     }
   };
 
+  const handleVoice = () => {
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast({
+        title: "Voice not supported",
+        description: "Your browser doesn't support voice input.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0]?.[0]?.transcript ?? "";
+      setInput((prev) => (prev ? prev + " " + transcript : transcript));
+      setIsListening(false);
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  };
+
+  const charCount = input.length;
+  const charMax = 2000;
+
   return (
-    <div className="flex flex-col border-t border-white/10 bg-[#0f0f0f]" style={{ height: 260 }}>
+    <div className="flex flex-col h-full bg-[#0f0f0f] min-h-0">
       {/* Panel header */}
       <div className="h-8 bg-[#111] border-b border-white/10 flex items-center px-3 gap-2 shrink-0">
         <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -204,6 +279,53 @@ function ChatPanel({
         </span>
       </div>
 
+      {/* Toolbar */}
+      <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/10 bg-[#0d0d0d] shrink-0 flex-wrap">
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo last AI change"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+        >
+          <RotateCcw className="w-3 h-3" /> Undo
+        </button>
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+        >
+          <Redo2 className="w-3 h-3" /> Redo
+        </button>
+        <button
+          onClick={onReset}
+          disabled={!canReset}
+          title="Reset to original generated version"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+        >
+          <RefreshCcw className="w-3 h-3" /> Reset
+        </button>
+        <button
+          onClick={onCopyCode}
+          title="Copy current code to clipboard"
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors"
+        >
+          <Copy className="w-3 h-3" /> Copy
+        </button>
+        <button
+          onClick={onToggleFullscreen}
+          title={isFullscreen ? "Exit fullscreen preview" : "Fullscreen preview"}
+          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 transition-colors ml-auto"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-3 h-3" />
+          ) : (
+            <Maximize2 className="w-3 h-3" />
+          )}
+          {isFullscreen ? "Exit" : "Fullscreen"}
+        </button>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
         {messages.map((msg) => (
@@ -211,7 +333,6 @@ function ChatPanel({
             key={msg.id}
             className={cn("flex gap-2", msg.role === "user" && "flex-row-reverse")}
           >
-            {/* Avatar */}
             <div
               className={cn(
                 "shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5",
@@ -220,24 +341,18 @@ function ChatPanel({
                 msg.role === "error" && "bg-red-900/40",
               )}
             >
-              {msg.role === "assistant" && (
-                <Bot className="w-3 h-3 text-emerald-400" />
-              )}
-              {msg.role === "user" && (
-                <User className="w-3 h-3 text-white/60" />
-              )}
-              {msg.role === "error" && (
-                <AlertTriangle className="w-3 h-3 text-red-400" />
-              )}
+              {msg.role === "assistant" && <Bot className="w-3 h-3 text-emerald-400" />}
+              {msg.role === "user" && <User className="w-3 h-3 text-white/60" />}
+              {msg.role === "error" && <AlertTriangle className="w-3 h-3 text-red-400" />}
             </div>
 
-            {/* Bubble */}
             <div
               className={cn(
                 "max-w-[80%] rounded-lg px-2.5 py-1.5 text-[12px] leading-relaxed whitespace-pre-wrap",
                 msg.role === "user" && "bg-emerald-400/10 text-white/80",
                 msg.role === "assistant" && "bg-white/5 text-white/75",
-                msg.role === "error" && "bg-red-900/30 text-red-300 border border-red-800/40",
+                msg.role === "error" &&
+                  "bg-red-900/30 text-red-300 border border-red-800/40",
               )}
             >
               {msg.text}
@@ -277,7 +392,24 @@ function ChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Input row */}
+      {/* Quick action chips */}
+      <div className="px-3 pt-1.5 pb-1 flex flex-wrap gap-1 shrink-0 border-t border-white/5">
+        {QUICK_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            onClick={() => {
+              if (isThinking) return;
+              onSend(chip);
+            }}
+            disabled={isThinking}
+            className="px-2 py-0.5 rounded-full bg-white/5 text-[10px] text-white/40 hover:bg-emerald-400/15 hover:text-emerald-300 border border-white/10 hover:border-emerald-400/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {/* Input area */}
       <div className="px-3 pb-2.5 pt-1.5 shrink-0">
         <div
           className={cn(
@@ -290,21 +422,50 @@ function ChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='e.g. "make the player faster"   (Enter to send, Shift+Enter for new line)'
+            placeholder='Describe a change... try "add a double jump" or "make enemies faster"'
             rows={1}
-            className="flex-1 bg-transparent text-[12px] text-white/75 placeholder:text-white/25 outline-none resize-none leading-5"
-            style={{ maxHeight: 80 }}
+            className="flex-1 bg-transparent text-[12px] text-white/75 placeholder:text-white/25 outline-none resize-none leading-5 overflow-hidden"
+            style={{ minHeight: "20px", maxHeight: "120px" }}
             disabled={isThinking}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isThinking}
-            className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors mb-0.5"
-            title="Send (Enter)"
-          >
-            <Send className="w-3.5 h-3.5 text-white" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0 mb-0.5">
+            <span
+              className={cn(
+                "text-[10px] font-mono tabular-nums",
+                charCount > charMax * 0.9 ? "text-amber-400" : "text-white/20",
+              )}
+            >
+              {charCount}
+            </span>
+            <button
+              onClick={handleVoice}
+              title={isListening ? "Stop recording" : "Voice input"}
+              className={cn(
+                "w-6 h-6 rounded-md flex items-center justify-center transition-colors",
+                isListening
+                  ? "bg-red-500/20 text-red-400 animate-pulse"
+                  : "text-white/30 hover:text-white/60 hover:bg-white/5",
+              )}
+            >
+              {isListening ? (
+                <MicOff className="w-3 h-3" />
+              ) : (
+                <Mic className="w-3 h-3" />
+              )}
+            </button>
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || isThinking}
+              className="w-7 h-7 rounded-md flex items-center justify-center bg-emerald-500 hover:bg-emerald-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Send (Enter)"
+            >
+              <Send className="w-3.5 h-3.5 text-white" />
+            </button>
+          </div>
         </div>
+        <p className="text-[10px] text-white/20 mt-1 ml-1">
+          Enter to send · Shift+Enter for new line
+        </p>
       </div>
     </div>
   );
@@ -328,15 +489,21 @@ export default function GameEditor() {
   // ── Editor state ──────────────────────────────────────────────────────────
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
-
-  // What's loaded in the iframe (updates on first load + explicit Run + AI updates)
   const [previewCode, setPreviewCode] = useState("");
   const [iframeKey, setIframeKey] = useState(0);
-
-  // Dirty / save tracking
   const [savedCode, setSavedCode] = useState("");
   const [savedTitle, setSavedTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Undo / Redo history (refs for perf — counts trigger re-renders)
+  const undoStack = useRef<string[]>([]);
+  const redoStack = useRef<string[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
+
+  // Original code — set once on first load, never changes
+  const originalCode = useRef<string>("");
 
   // Chat state — seed with game plan from sessionStorage if present
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -347,12 +514,9 @@ export default function GameEditor() {
   });
   const [isThinking, setIsThinking] = useState(false);
 
-  // Undo stack — store up to 20 previous code snapshots before AI edits
-  const undoStack = useRef<string[]>([]);
-
   const initializedForId = useRef<number | null>(null);
 
-  // Initialise from loaded game
+  // Initialise state from loaded game data (also resets history when switching games)
   useEffect(() => {
     if (game && initializedForId.current !== game.id) {
       initializedForId.current = game.id;
@@ -362,12 +526,19 @@ export default function GameEditor() {
       setSavedTitle(game.title);
       setPreviewCode(game.gameCode);
       setIframeKey((k) => k + 1);
+      // Always anchor originalCode to this specific game's initial code
+      originalCode.current = game.gameCode;
+      // Clear history stacks — they belong to the previous game
+      undoStack.current = [];
+      redoStack.current = [];
+      setUndoCount(0);
+      setRedoCount(0);
     }
   }, [game]);
 
   const isDirty = code !== savedCode || title !== savedTitle;
 
-  // Keep refs for interval / event handlers
+  // Keep refs up-to-date for use inside intervals / callbacks
   const codeRef = useRef(code);
   const titleRef = useRef(title);
   codeRef.current = code;
@@ -454,9 +625,7 @@ export default function GameEditor() {
         },
       );
     };
-
     if (isDirty) {
-      // Save first, then publish once the save completes
       setIsSaving(true);
       updateGame.mutate(
         { id, data: { gameCode: code, title } },
@@ -482,20 +651,55 @@ export default function GameEditor() {
     }
   };
 
-  // ── Undo ─────────────────────────────────────────────────────────────────
+  // ── Undo ──────────────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
     const prev = undoStack.current.pop();
     if (!prev) return;
+    redoStack.current.push(codeRef.current);
+    setUndoCount(undoStack.current.length);
+    setRedoCount(redoStack.current.length);
     setCode(prev);
     setPreviewCode(prev);
     setIframeKey((k) => k + 1);
-    // Auto-save the reverted version
     if (id) doSave(prev, titleRef.current);
-    setMessages((m) => [
-      ...m,
-      newMsg("assistant", "↩ Reverted to the previous version."),
-    ]);
+    setMessages((m) => [...m, newMsg("assistant", "↩ Reverted to the previous version.")]);
   }, [id, doSave]);
+
+  // ── Redo ──────────────────────────────────────────────────────────────────
+  const handleRedo = useCallback(() => {
+    const next = redoStack.current.pop();
+    if (!next) return;
+    undoStack.current.push(codeRef.current);
+    setUndoCount(undoStack.current.length);
+    setRedoCount(redoStack.current.length);
+    setCode(next);
+    setPreviewCode(next);
+    setIframeKey((k) => k + 1);
+    if (id) doSave(next, titleRef.current);
+    setMessages((m) => [...m, newMsg("assistant", "↪ Moved forward to the next version.")]);
+  }, [id, doSave]);
+
+  // ── Reset to original ─────────────────────────────────────────────────────
+  const handleReset = useCallback(() => {
+    const orig = originalCode.current;
+    if (!orig || orig === codeRef.current) return;
+    undoStack.current.push(codeRef.current);
+    redoStack.current = [];
+    setUndoCount(undoStack.current.length);
+    setRedoCount(0);
+    setCode(orig);
+    setPreviewCode(orig);
+    setIframeKey((k) => k + 1);
+    if (id) doSave(orig, titleRef.current);
+    setMessages((m) => [...m, newMsg("assistant", "🔄 Reset to the original generated version.")]);
+  }, [id, doSave]);
+
+  // ── Copy code ─────────────────────────────────────────────────────────────
+  const handleCopyCode = useCallback(() => {
+    navigator.clipboard.writeText(codeRef.current).then(() => {
+      toast({ title: "Copied!", description: "Game code copied to clipboard." });
+    });
+  }, []);
 
   // ── AI chat send ──────────────────────────────────────────────────────────
   const handleChatSend = useCallback(
@@ -505,9 +709,13 @@ export default function GameEditor() {
       setMessages((m) => [...m, newMsg("user", text)]);
       setIsThinking(true);
 
-      // Push current code onto undo stack before AI overwrites it
+      // Save current code to undo stack before AI overwrites it
       undoStack.current.push(codeRef.current);
+      // Any new edit clears the redo stack
+      redoStack.current = [];
       if (undoStack.current.length > 20) undoStack.current.shift();
+      setUndoCount(undoStack.current.length);
+      setRedoCount(0);
 
       chatEdit.mutate(
         { id, data: { message: text, currentCode: codeRef.current } },
@@ -516,27 +724,43 @@ export default function GameEditor() {
             setIsThinking(false);
             const updated = data.updatedCode;
 
-            // Apply the new code
+            // Sanity check — auto-revert if response looks broken
+            if (!updated || updated.length < 200 || !updated.trimStart().startsWith("<")) {
+              undoStack.current.pop();
+              setUndoCount(undoStack.current.length);
+              setMessages((m) => [
+                ...m,
+                newMsg(
+                  "error",
+                  "⚠️ The AI returned invalid code. Your game is unchanged. Please try rephrasing your request.",
+                ),
+              ]);
+              return;
+            }
+
+            // Apply the new code and reload the preview
             setCode(updated);
             setPreviewCode(updated);
             setIframeKey((k) => k + 1);
 
-            // Auto-save
+            // Auto-save the new version
             doSave(updated, titleRef.current);
+
+            const summary = data.changeSummary;
+            const successText = summary
+              ? `✓ Done! ${summary}`
+              : "✓ Applied your change and refreshed the preview.";
 
             setMessages((m) => [
               ...m,
-              newMsg(
-                "assistant",
-                `✓ Done! Applied your change and refreshed the preview.`,
-                true, // undoable
-              ),
+              newMsg("assistant", successText, true /* undoable */),
             ]);
           },
           onError: (err: any) => {
             setIsThinking(false);
-            // Pop from undo stack since we didn't apply a change
+            // No change was made — pop the undo entry we optimistically added
             undoStack.current.pop();
+            setUndoCount(undoStack.current.length);
 
             const detail =
               err?.error || err?.message || "The AI couldn't apply that change.";
@@ -544,7 +768,7 @@ export default function GameEditor() {
               ...m,
               newMsg(
                 "error",
-                `❌ ${detail}\n\nYou can try rephrasing, or be more specific about what you want to change.`,
+                `❌ ${detail}\n\nTry rephrasing, or be more specific about what you want to change.`,
               ),
             ]);
           },
@@ -571,7 +795,9 @@ export default function GameEditor() {
     );
   }
 
-  const canUndo = undoStack.current.length > 0;
+  const canUndo = undoCount > 0;
+  const canRedo = redoCount > 0;
+  const canReset = !!originalCode.current && code !== originalCode.current;
 
   return (
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-[#0a0a0a] text-white">
@@ -603,7 +829,7 @@ export default function GameEditor() {
             {isDirty && (
               <span
                 className="flex items-center gap-1 text-[11px] font-mono text-amber-400/70 shrink-0"
-                title="You have unsaved changes — auto-saves every 30 s"
+                title="Unsaved changes — auto-saves every 30 s"
               >
                 <Circle className="w-2 h-2 fill-amber-400/70" />
                 unsaved
@@ -624,7 +850,6 @@ export default function GameEditor() {
             onClick={handleRun}
             title="Reload preview with current code"
           >
-            <Play className="w-3.5 h-3.5" />
             Run
           </Button>
 
@@ -649,19 +874,6 @@ export default function GameEditor() {
             Save
           </Button>
 
-          {canUndo && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-white/15 text-white/40 hover:text-white/70 gap-1.5 h-8"
-              onClick={handleUndo}
-              title="Undo last AI change"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Undo
-            </Button>
-          )}
-
           {game.status === "draft" && (
             <Button
               size="sm"
@@ -676,76 +888,129 @@ export default function GameEditor() {
         </div>
       </header>
 
-      {/* ── 4-panel body ────────────────────────────────────────────────────── */}
+      {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
-
-        {/* Left: file explorer + settings */}
+        {/* Left sidebar */}
         <Sidebar />
 
-        {/* Center column: preview (top) + AI chat (bottom) */}
-        <div className="flex flex-col flex-1 min-w-0 min-h-0">
-
-          {/* Preview area */}
-          <div className="flex-1 bg-black relative overflow-hidden min-h-0">
-            <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/10 rounded text-[9px] font-mono text-white/40 uppercase tracking-widest select-none pointer-events-none">
-              Live Preview
-            </div>
-            {isThinking && (
-              <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-900/60 border border-emerald-400/30 rounded text-[10px] font-mono text-emerald-300 backdrop-blur-md">
-                <Sparkles className="w-3 h-3 animate-pulse" />
-                AI is updating…
+        {/* Center + Right via horizontal resizable panels */}
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
+          {/* Center: live game preview */}
+          <ResizablePanel defaultSize={60} minSize={30}>
+            <div className="relative h-full bg-black overflow-hidden">
+              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/10 rounded text-[9px] font-mono text-white/40 uppercase tracking-widest select-none pointer-events-none">
+                Live Preview
               </div>
-            )}
-            <iframe
-              key={iframeKey}
-              srcDoc={previewCode}
-              className="w-full h-full border-none"
-              sandbox="allow-scripts"
-              title="Game Preview"
-            />
-          </div>
+              {isThinking && (
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-900/60 border border-emerald-400/30 rounded text-[10px] font-mono text-emerald-300 backdrop-blur-md">
+                  <Sparkles className="w-3 h-3 animate-pulse" />
+                  AI is updating…
+                </div>
+              )}
+              <iframe
+                key={iframeKey}
+                srcDoc={previewCode}
+                className="w-full h-full border-none"
+                sandbox="allow-scripts"
+                title="Game Preview"
+              />
+            </div>
+          </ResizablePanel>
 
-          {/* AI chat panel */}
-          <ChatPanel
-            messages={messages}
-            isThinking={isThinking}
-            onSend={handleChatSend}
-            onUndo={handleUndo}
-            canUndo={canUndo}
-          />
-        </div>
+          <ResizableHandle className="w-1 bg-white/5 hover:bg-emerald-400/20 transition-colors cursor-col-resize" />
 
-        {/* Right: code editor */}
-        <div
-          className="flex flex-col bg-[#0d0d0d] border-l border-white/10 min-h-0"
-          style={{ width: 340 }}
-        >
-          <div className="h-8 bg-[#111] border-b border-white/10 flex items-center px-3 shrink-0 gap-2">
-            <Code2 className="w-3.5 h-3.5 text-white/30" />
-            <span className="text-[11px] font-mono text-white/40">
-              index.html
-            </span>
-            {isThinking && (
-              <span className="ml-auto text-[10px] text-emerald-400/70 font-mono animate-pulse">
-                ● updating…
-              </span>
-            )}
-          </div>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            readOnly={isThinking}
-            className={cn(
-              "flex-1 bg-transparent text-[#d4d4d4] font-mono text-[12px] leading-relaxed p-4 resize-none outline-none focus:ring-0 w-full min-h-0 transition-opacity",
-              isThinking && "opacity-50 cursor-not-allowed",
-            )}
-            spellCheck={false}
-            style={{ tabSize: 2 }}
-            aria-label="Game source code"
-            title={isThinking ? "AI is updating the code…" : undefined}
-          />
-        </div>
+          {/* Right: vertically split code editor + chat */}
+          <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
+            <ResizablePanelGroup direction="vertical">
+              {/* Top: syntax-highlighted code editor */}
+              <ResizablePanel defaultSize={50} minSize={20}>
+                <div className="flex flex-col h-full bg-[#0d0d0d]">
+                  <div className="h-8 bg-[#111] border-b border-white/10 flex items-center px-3 shrink-0 gap-2">
+                    <Code2 className="w-3.5 h-3.5 text-white/30" />
+                    <span className="text-[11px] font-mono text-white/40">
+                      index.html
+                    </span>
+                    {isThinking && (
+                      <span className="ml-auto text-[10px] text-emerald-400/70 font-mono animate-pulse">
+                        ● updating…
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      "flex-1 overflow-auto min-h-0",
+                      isThinking && "opacity-50 pointer-events-none",
+                    )}
+                  >
+                    <CodeMirror
+                      value={code}
+                      onChange={(value) => setCode(value)}
+                      extensions={[htmlLang()]}
+                      theme={oneDark}
+                      height="100%"
+                      style={{ height: "100%", fontSize: "12px" }}
+                      basicSetup={{
+                        lineNumbers: true,
+                        foldGutter: true,
+                        autocompletion: true,
+                      }}
+                    />
+                  </div>
+                </div>
+              </ResizablePanel>
+
+              <ResizableHandle
+                withHandle
+                className="h-1.5 bg-white/5 hover:bg-emerald-400/20 transition-colors cursor-row-resize"
+              />
+
+              {/* Bottom: AI chat */}
+              <ResizablePanel defaultSize={50} minSize={25}>
+                <ChatPanel
+                  messages={messages}
+                  isThinking={isThinking}
+                  onSend={handleChatSend}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  onReset={handleReset}
+                  onCopyCode={handleCopyCode}
+                  onToggleFullscreen={() => setIsFullscreen((f) => !f)}
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                  canReset={canReset}
+                  isFullscreen={isFullscreen}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
+
+      {/* ── Fullscreen preview overlay ───────────────────────────────────────── */}
+      {isFullscreen && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 bg-[#111] border-b border-white/10 shrink-0">
+            <div className="flex items-center gap-2">
+              <Gamepad2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-[12px] font-mono text-white/50">{title}</span>
+            </div>
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="p-1.5 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+              title="Exit fullscreen"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <iframe
+            key={`fs-${iframeKey}`}
+            srcDoc={previewCode}
+            className="flex-1 border-none"
+            sandbox="allow-scripts"
+            title="Game Preview — Fullscreen"
+          />
+        </div>
+      )}
     </div>
   );
 }

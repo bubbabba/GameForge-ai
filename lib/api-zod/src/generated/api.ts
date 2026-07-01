@@ -215,7 +215,8 @@ export const ChatEditGameBody = zod.object({
 })
 
 export const ChatEditGameResponse = zod.object({
-  "updatedCode": zod.string()
+  "updatedCode": zod.string(),
+  "changeSummary": zod.string().optional()
 })
 
 
