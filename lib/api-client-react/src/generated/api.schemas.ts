@@ -9,9 +9,10 @@ export interface HealthStatus {
   status: string;
 }
 
-/**
- * Genre of the game
- */
+export interface ErrorResponse {
+  error: string;
+}
+
 export type GameRequestGenre = typeof GameRequestGenre[keyof typeof GameRequestGenre];
 
 
@@ -22,26 +23,106 @@ export const GameRequestGenre = {
   Puzzle: 'Puzzle',
   Racing: 'Racing',
   RPG: 'RPG',
+  Adventure: 'Adventure',
+  Fantasy: 'Fantasy',
+  FP_Horror: 'FP Horror',
+  Space_Shooter: 'Space Shooter',
+} as const;
+
+export type GameRequestEngine = typeof GameRequestEngine[keyof typeof GameRequestEngine];
+
+
+export const GameRequestEngine = {
+  '2d': '2d',
+  '3d': '3d',
 } as const;
 
 export interface GameRequest {
-  /**
-     * Description of the game to generate
-     * @minLength 1
-     */
+  /** @minLength 1 */
   prompt: string;
-  /** Genre of the game */
   genre: GameRequestGenre;
+  engine?: GameRequestEngine;
 }
 
-export interface GameResponse {
-  /** Complete HTML/JS code for the Phaser.js game */
+export interface GameGenerated {
   gameCode: string;
-  /** Auto-generated title for the game */
   title: string;
 }
 
-export interface ErrorResponse {
-  error: string;
+export type GameStatus = typeof GameStatus[keyof typeof GameStatus];
+
+
+export const GameStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface Game {
+  id: number;
+  title: string;
+  genre: string;
+  prompt: string;
+  gameCode: string;
+  status: GameStatus;
+  slug: string;
+  likesCount: number;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export type GameSummaryStatus = typeof GameSummaryStatus[keyof typeof GameSummaryStatus];
+
+
+export const GameSummaryStatus = {
+  draft: 'draft',
+  published: 'published',
+} as const;
+
+export interface GameSummary {
+  id: number;
+  title: string;
+  genre: string;
+  status: GameSummaryStatus;
+  slug: string;
+  likesCount: number;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface GameInput {
+  /** @minLength 1 */
+  title: string;
+  genre: string;
+  prompt: string;
+  gameCode: string;
+}
+
+export interface GamePatch {
+  title?: string;
+  gameCode?: string;
+}
+
+export interface LikeResult {
+  liked: boolean;
+  likesCount: number;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  totalGames: number;
+  publishedGames: number;
+  draftGames: number;
+  totalLikes: number;
+}
+
+export type ListPublicGamesParams = {
+genre?: string;
+search?: string;
+limit?: number;
+offset?: number;
+};
 

@@ -11,14 +11,15 @@ tags:
   - name: health
     description: Health operations
   - name: games
-    description: Game generation operations
+    description: Game generation and management
+  - name: users
+    description: User profile operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -26,12 +27,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
   /games/generate:
     post:
       operationId: generateGame
       tags: [games]
-      summary: Generate a playable browser game
-      description: Uses Claude AI to generate a Phaser.js game based on user description and genre
+      summary: Generate a playable browser game via AI
       requestBody:
         required: true
         content:
@@ -44,7 +45,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GameResponse"
+                $ref: "#/components/schemas/GameGenerated"
         "400":
           description: Invalid request
           content:
@@ -57,45 +58,441 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /games/public:
+    get:
+      operationId: listPublicGames
+      tags: [games]
+      summary: List published community games
+      parameters:
+        - name: genre
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of published games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameSummary"
+
+  /games/my:
+    get:
+      operationId: listMyGames
+      tags: [games]
+      summary: List the current user's games (drafts and published)
+      responses:
+        "200":
+          description: User's games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameSummary"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games:
+    post:
+      operationId: saveGame
+      tags: [games]
+      summary: Save a generated game as a draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GameInput"
+      responses:
+        "201":
+          description: Saved draft game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/{id}:
+    get:
+      operationId: getGame
+      tags: [games]
+      summary: Get a single game by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Game details with full code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateGame
+      tags: [games]
+      summary: Update a draft game's code or title
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GamePatch"
+      responses:
+        "200":
+          description: Updated game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: deleteGame
+      tags: [games]
+      summary: Delete a game
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/{id}/publish:
+    post:
+      operationId: publishGame
+      tags: [games]
+      summary: Publish a draft game to the community gallery
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Published game
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/{id}/like:
+    post:
+      operationId: toggleLike
+      tags: [games]
+      summary: Toggle like on a published game
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Like toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LikeResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/slug/{slug}:
+    get:
+      operationId: getGameBySlug
+      tags: [games]
+      summary: Get a published game by its shareable slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Game details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user's profile and stats
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me/liked:
+    get:
+      operationId: getMyLikedGames
+      tags: [users]
+      summary: Get game IDs liked by the current user
+      responses:
+        "200":
+          description: Liked game IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    # AI generation input/output (no DB save)
     GameRequest:
       type: object
-      required:
-        - prompt
-        - genre
+      required: [prompt, genre]
       properties:
         prompt:
           type: string
           minLength: 1
-          description: Description of the game to generate
         genre:
           type: string
-          enum: [Platformer, Horror, Shooter, Puzzle, Racing, RPG]
-          description: Genre of the game
-    GameResponse:
+          enum: [Platformer, Horror, Shooter, Puzzle, Racing, RPG, Adventure, Fantasy, FP Horror, Space Shooter]
+        engine:
+          type: string
+          enum: ["2d", "3d"]
+          default: "2d"
+
+    GameGenerated:
       type: object
-      required:
-        - gameCode
-        - title
+      required: [gameCode, title]
       properties:
         gameCode:
           type: string
-          description: Complete HTML/JS code for the Phaser.js game
         title:
           type: string
-          description: Auto-generated title for the game
-    ErrorResponse:
+
+    # Full game object (with code)
+    Game:
       type: object
-      required:
-        - error
+      required: [id, title, genre, prompt, gameCode, status, slug, likesCount, authorId, authorName, createdAt, updatedAt]
       properties:
-        error:
+        id:
+          type: integer
+        title:
           type: string
+        genre:
+          type: string
+        prompt:
+          type: string
+        gameCode:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        slug:
+          type: string
+        likesCount:
+          type: integer
+        authorId:
+          type: string
+        authorName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # Summary for list views (no code)
+    GameSummary:
+      type: object
+      required: [id, title, genre, status, slug, likesCount, authorId, authorName, createdAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        genre:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        slug:
+          type: string
+        likesCount:
+          type: integer
+        authorId:
+          type: string
+        authorName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # Save generated game as draft
+    GameInput:
+      type: object
+      required: [title, genre, prompt, gameCode]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        genre:
+          type: string
+        prompt:
+          type: string
+        gameCode:
+          type: string
+
+    # Patch existing game
+    GamePatch:
+      type: object
+      properties:
+        title:
+          type: string
+        gameCode:
+          type: string
+
+    LikeResult:
+      type: object
+      required: [liked, likesCount]
+      properties:
+        liked:
+          type: boolean
+        likesCount:
+          type: integer
+
+    UserProfile:
+      type: object
+      required: [id, name, totalGames, publishedGames, draftGames, totalLikes]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        totalGames:
+          type: integer
+        publishedGames:
+          type: integer
+        draftGames:
+          type: integer
+        totalLikes:
+          type: integer

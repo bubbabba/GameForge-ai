@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -18,20 +17,233 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Uses Claude AI to generate a Phaser.js game based on user description and genre
- * @summary Generate a playable browser game
+ * @summary Generate a playable browser game via AI
+ */
+
+export const generateGameBodyEngineDefault = `2d`;
+
+export const GenerateGameBody = zod.object({
+  "prompt": zod.string().min(1),
+  "genre": zod.enum(['Platformer', 'Horror', 'Shooter', 'Puzzle', 'Racing', 'RPG', 'Adventure', 'Fantasy', 'FP Horror', 'Space Shooter']),
+  "engine": zod.enum(['2d', '3d']).default(generateGameBodyEngineDefault)
+})
+
+export const GenerateGameResponse = zod.object({
+  "gameCode": zod.string(),
+  "title": zod.string()
+})
+
+
+/**
+ * @summary List published community games
+ */
+export const listPublicGamesQueryLimitDefault = 20;
+export const listPublicGamesQueryOffsetDefault = 0;
+
+export const ListPublicGamesQueryParams = zod.object({
+  "genre": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listPublicGamesQueryLimitDefault),
+  "offset": zod.coerce.number().default(listPublicGamesQueryOffsetDefault)
+})
+
+export const ListPublicGamesResponseItem = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPublicGamesResponse = zod.array(ListPublicGamesResponseItem)
+
+
+/**
+ * @summary List the current user's games (drafts and published)
+ */
+export const ListMyGamesResponseItem = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListMyGamesResponse = zod.array(ListMyGamesResponseItem)
+
+
+/**
+ * @summary Save a generated game as a draft
  */
 
 
 
-export const GenerateGameBody = zod.object({
-  "prompt": zod.string().min(1).describe('Description of the game to generate'),
-  "genre": zod.enum(['Platformer', 'Horror', 'Shooter', 'Puzzle', 'Racing', 'RPG']).describe('Genre of the game')
+export const SaveGameBody = zod.object({
+  "title": zod.string().min(1),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string()
 })
 
-export const GenerateGameResponse = zod.object({
-  "gameCode": zod.string().describe('Complete HTML\/JS code for the Phaser.js game'),
-  "title": zod.string().describe('Auto-generated title for the game')
+export const SaveGameResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Get a single game by ID
+ */
+export const GetGameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetGameResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a draft game's code or title
+ */
+export const UpdateGameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateGameBody = zod.object({
+  "title": zod.string().optional(),
+  "gameCode": zod.string().optional()
+})
+
+export const UpdateGameResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a game
+ */
+export const DeleteGameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteGameResponse = zod.void()
+
+
+/**
+ * @summary Publish a draft game to the community gallery
+ */
+export const PublishGameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PublishGameResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Toggle like on a published game
+ */
+export const ToggleLikeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ToggleLikeResponse = zod.object({
+  "liked": zod.boolean(),
+  "likesCount": zod.number()
+})
+
+
+/**
+ * @summary Get a published game by its shareable slug
+ */
+export const GetGameBySlugParams = zod.object({
+  "slug": zod.coerce.string()
+})
+
+export const GetGameBySlugResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "genre": zod.string(),
+  "prompt": zod.string(),
+  "gameCode": zod.string(),
+  "status": zod.enum(['draft', 'published']),
+  "slug": zod.string(),
+  "likesCount": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get current user's profile and stats
+ */
+export const GetMeResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "totalGames": zod.number(),
+  "publishedGames": zod.number(),
+  "draftGames": zod.number(),
+  "totalLikes": zod.number()
+})
+
+
+/**
+ * @summary Get game IDs liked by the current user
+ */
+export const GetMyLikedGamesResponseItem = zod.number()
+export const GetMyLikedGamesResponse = zod.array(GetMyLikedGamesResponseItem)
 
 

@@ -6,9 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface GameResponse {
-  /** Complete HTML/JS code for the Phaser.js game */
+export interface GameGenerated {
   gameCode: string;
-  /** Auto-generated title for the game */
   title: string;
 }

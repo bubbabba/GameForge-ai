@@ -5,14 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { GameRequestEngine } from './gameRequestEngine';
 import type { GameRequestGenre } from './gameRequestGenre';
 
 export interface GameRequest {
-  /**
-     * Description of the game to generate
-     * @minLength 1
-     */
+  /** @minLength 1 */
   prompt: string;
-  /** Genre of the game */
   genre: GameRequestGenre;
+  engine?: GameRequestEngine;
 }

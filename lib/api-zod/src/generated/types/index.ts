@@ -7,7 +7,17 @@
  */
 
 export * from './errorResponse';
+export * from './game';
+export * from './gameGenerated';
+export * from './gameInput';
+export * from './gamePatch';
 export * from './gameRequest';
+export * from './gameRequestEngine';
 export * from './gameRequestGenre';
-export * from './gameResponse';
+export * from './gameStatus';
+export * from './gameSummary';
+export * from './gameSummaryStatus';
 export * from './healthStatus';
+export * from './likeResult';
+export * from './listPublicGamesParams';
+export * from './userProfile';

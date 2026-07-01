@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-/**
- * Genre of the game
- */
 export type GameRequestGenre = typeof GameRequestGenre[keyof typeof GameRequestGenre];
 
 
@@ -19,4 +16,8 @@ export const GameRequestGenre = {
   Puzzle: 'Puzzle',
   Racing: 'Racing',
   RPG: 'RPG',
+  Adventure: 'Adventure',
+  Fantasy: 'Fantasy',
+  FP_Horror: 'FP Horror',
+  Space_Shooter: 'Space Shooter',
 } as const;
