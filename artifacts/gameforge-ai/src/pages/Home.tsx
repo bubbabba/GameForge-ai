@@ -40,8 +40,8 @@ export default function Home() {
     prompt: string;
     qualityScore?: number;
     gamePlan?: string;
-    spritesJson?: string;
     gameContextJson?: string;
+    generationStatus?: string;
   } | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,19 +80,13 @@ export default function Home() {
         qualityScore?: number;
         gamePlan?: string;
         gameContextJson?: string;
-        sprites?: Array<{ name: string; objectPath: string; url: string; description: string }>;
-        backgroundSprite?: { name: string; objectPath: string; url: string; description: string } | null;
+        needsSpriteGeneration?: boolean;
       }>("/api/games/generate", { prompt }, (msg) => setStatusMessage(msg));
 
       const resolvedGenre = data.genre ?? "Platformer";
       const resolvedEngine = data.engine ?? "2d";
-
-      // Serialize sprites for DB storage (objectPaths, not absolute URLs)
-      const spritesList = [
-        ...(data.sprites ?? []).map((s) => ({ name: s.name, url: s.objectPath, description: s.description })),
-        ...(data.backgroundSprite ? [{ name: "bg", url: data.backgroundSprite.objectPath, description: data.backgroundSprite.description }] : []),
-      ];
-      const spritesJson = spritesList.length > 0 ? JSON.stringify(spritesList) : undefined;
+      // Sprites are generated in the background after saving — no sprites in generate result
+      const generationStatus = data.needsSpriteGeneration ? "sprites_pending" : "complete";
 
       if (isSignedInRef.current) {
         saveGame.mutate(
@@ -102,9 +96,9 @@ export default function Home() {
               genre: resolvedGenre,
               prompt,
               gameCode: data.gameCode,
-              spritesJson,
               gamePlan: data.gamePlan,
               gameContext: data.gameContextJson,
+              generationStatus,
             },
           },
           {
@@ -133,8 +127,8 @@ export default function Home() {
           prompt,
           qualityScore: data.qualityScore,
           gamePlan: data.gamePlan,
-          spritesJson,
           gameContextJson: data.gameContextJson,
+          generationStatus,
         });
       }
     } catch (err: any) {
@@ -155,9 +149,9 @@ export default function Home() {
           genre: guestPreview.genre,
           prompt: guestPreview.prompt,
           gameCode: guestPreview.gameCode,
-          spritesJson: guestPreview.spritesJson,
           gamePlan: guestPreview.gamePlan,
           gameContext: guestPreview.gameContextJson,
+          generationStatus: guestPreview.generationStatus,
         },
       },
       {

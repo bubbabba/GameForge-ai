@@ -109,7 +109,7 @@ async function callIdentificationClaude(
   }
 }
 
-async function identifyVisualElements(
+export async function identifyVisualElements(
   apiKey: string,
   gdd: string,
   prompt: string,
@@ -183,6 +183,69 @@ async function runConsistencyCheck(
   } catch {
     return [];
   }
+}
+
+// ─── Sequential per-sprite generation for background sprite endpoint ──────────
+
+/**
+ * Generates sprites one at a time for a saved game.
+ * Called after the game code is saved so each sprite can be persisted to DB
+ * and injected live into the running iframe via postMessage.
+ */
+export async function generateSpritesForGame(
+  apiKey: string,
+  gamePlan: string,
+  prompt: string,
+  gameContextJson: string | null,
+  onStatus: (msg: string) => void,
+  onSpriteReady: (sprite: GeneratedSprite) => Promise<void>,
+): Promise<{ sprites: GeneratedSprite[]; backgroundSprite: GeneratedSprite | null }> {
+  if (!process.env.REPLICATE_API_KEY) return { sprites: [], backgroundSprite: null };
+
+  onStatus("Identifying visual elements...");
+  const { sprites: specs, backgroundDescription, context: derivedContext } =
+    await identifyVisualElements(apiKey, gamePlan, prompt);
+
+  // Use stored gameContext for prompt consistency, fall back to derived
+  let context: GameContext = derivedContext;
+  if (gameContextJson) {
+    try {
+      const parsed = JSON.parse(gameContextJson);
+      if (isValidContext(parsed)) context = parsed;
+    } catch { /* use derived */ }
+  }
+
+  const baseUrl = getBaseUrl();
+  const sprites: GeneratedSprite[] = [];
+  let backgroundSprite: GeneratedSprite | null = null;
+
+  // Background first (widest aspect ratio → scenic prompt)
+  onStatus("Generating background...");
+  try {
+    const bgPrompt = `${backgroundDescription}, ${context.artStyle}, ${context.colorPalette}, atmospheric game background, ${context.mood}, detailed environment, no characters, no UI, no text, pixel art`;
+    const objectPath = await generateSpriteFromPrompt(bgPrompt, "4:3");
+    backgroundSprite = { name: "bg", objectPath, url: `${baseUrl}/api/storage${objectPath}`, description: backgroundDescription };
+    await onSpriteReady(backgroundSprite);
+  } catch { /* non-critical: skip bg on failure */ }
+
+  // Entity sprites one at a time so each appears live as it completes
+  for (const spec of specs) {
+    onStatus(`Generating ${spec.name} sprite...`);
+    try {
+      const replicatePrompt = buildReplicatePrompt(spec, context);
+      const objectPath = await generateSpriteFromPrompt(replicatePrompt, "1:1");
+      const sprite: GeneratedSprite = {
+        name: spec.name,
+        objectPath,
+        url: `${baseUrl}/api/storage${objectPath}`,
+        description: spec.description,
+      };
+      sprites.push(sprite);
+      await onSpriteReady(sprite);
+    } catch { /* non-critical: skip sprite on failure */ }
+  }
+
+  return { sprites, backgroundSprite };
 }
 
 // ─── Step 2: Generate all images in parallel ──────────────────────────────────

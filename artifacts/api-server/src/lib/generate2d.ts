@@ -2,16 +2,19 @@
  * Phaser.js 2D game generation via Claude — two-step approach.
  *
  * Step 1: Claude writes a game design document (GDD).
- * Step 1b: Auto-generate sprites via Replicate (parallel, optional).
+ * Step 1b: Claude extracts sprite specs + GameContext from the GDD (fast).
+ *          Real sprites are generated LATER in the background by the
+ *          POST /games/:id/generate-sprites endpoint.
  * Step 2: Claude builds a complete standalone Phaser 3 game from the GDD,
- *          using sprites if available, falling back to graphics primitives.
+ *          using SVG placeholder colored textures that get swapped live when
+ *          real pixel-art sprites arrive via window.postMessage.
  *
  * No template shells — Claude generates the full game logic from scratch,
  * wrapped in a minimal HTML/Phaser CDN page.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { generateGameSprites, type GeneratedSprite, type GameContext } from "./generateGameSprites";
+import { identifyVisualElements, type SpriteSpec, type GameContext } from "./generateGameSprites";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -36,6 +39,56 @@ const WRAPPER_FOOT = `
 <` + `/script>
 </body>
 </html>`;
+
+// ─── Live sprite swap listener (injected after Claude's code) ──────────────────
+//
+// Receives { type:'spriteReady', name, url } via window.postMessage from the
+// GameEditor when background sprite generation finishes each sprite.
+// Replaces the placeholder SVG texture with the real pixel-art sprite.
+
+const SPRITE_SWAP_LISTENER = `
+// Live sprite injection — swaps colored placeholder shapes with real pixel art
+window.addEventListener('message',function(e){if(!e.data||e.data.type!=='spriteReady')return;try{var n=e.data.name,u=e.data.url;game.scene.scenes.forEach(function(s){if(!s.sys.isActive()&&!s.sys.isSleeping())return;try{if(s.textures.exists(n))s.textures.remove(n);s.load.image(n,u);s.load.once('complete',function(){s.children.list.forEach(function(o){try{if(o&&o.texture&&o.texture.key===n)o.setTexture(n);}catch(_){}});try{if(s.physics&&s.physics.world)s.physics.world.bodies.entries.forEach(function(b){try{if(b.gameObject&&b.gameObject.texture&&b.gameObject.texture.key===n)b.gameObject.setTexture(n);}catch(_){}});}catch(_){}});s.load.start();}catch(_){}});}catch(_){}});`;
+
+// ─── SVG placeholder texture builder ──────────────────────────────────────────
+
+// Colors for each sprite slot (rgb() avoids # URL-encoding issues in SVG data URIs)
+const PLACEHOLDER_COLORS: Record<string, string> = {
+  player:  "rgb(74,222,128)",  // emerald green
+  enemy:   "rgb(248,113,113)", // red
+  enemy2:  "rgb(251,146,60)",  // orange
+  enemy3:  "rgb(167,139,250)", // purple
+  item:    "rgb(251,191,36)",  // yellow
+  item2:   "rgb(56,189,248)",  // cyan
+};
+
+function buildPlaceholderPreload(specs: SpriteSpec[]): string {
+  const lines: string[] = [];
+  // Background — large dark rectangle
+  lines.push(`  this.load.image('bg','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="rgb(26,26,46)"/></svg>');`);
+  for (const spec of specs) {
+    const color = PLACEHOLDER_COLORS[spec.name] ?? "rgb(150,150,150)";
+    const size = spec.type === "item" ? 28 : 48;
+    lines.push(`  this.load.image('${spec.name}','data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" fill="${color}"/></svg>');`);
+  }
+  return lines.join("\n");
+}
+
+function buildEntityUsage(specs: SpriteSpec[]): string {
+  return specs.map((spec) => {
+    const size = spec.type === "item" ? 28 : 48;
+    switch (spec.type) {
+      case "player":
+        return `- Player ('player'): this.player = this.physics.add.image(x, y, 'player').setDisplaySize(${size}, ${size})`;
+      case "enemy":
+        return `- Enemy ('${spec.name}'): enemies.create(x, y, '${spec.name}').setDisplaySize(${size}, ${size})`;
+      case "item":
+        return `- Item ('${spec.name}'): items.create(x, y, '${spec.name}').setDisplaySize(${size}, ${size})`;
+      default:
+        return `- Other ('${spec.name}'): this.physics.add.image(x, y, '${spec.name}').setDisplaySize(${size}, ${size})`;
+    }
+  }).join("\n");
+}
 
 // ─── Step 1: Game Design Document ─────────────────────────────────────────────
 
@@ -68,78 +121,35 @@ CRITICAL RULES — never violate these:
     this.input.keyboard.once('keydown-SPACE', () => this.scene.start('GameScene'))
     this.input.on('pointerdown', () => this.scene.start('GameScene'))
 - The start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
-- Use ONLY Phaser's built-in input system for all user interaction.`;
+- Use ONLY Phaser's built-in input system for all user interaction.
+- The Phaser game instance MUST be assigned to: var game = new Phaser.Game(config);`;
 
-interface SpriteManifest {
-  sprites: GeneratedSprite[];
-  background: GeneratedSprite | null;
-}
-
-function buildBuilderMessage(gdd: string, spriteManifest?: SpriteManifest): string {
-  const hasSprites = spriteManifest && (spriteManifest.sprites.length > 0 || spriteManifest.background);
-
-  let spriteSection: string;
-  if (hasSprites) {
-    const m = spriteManifest!;
-
-    // Build load lines only for successfully generated sprites
-    const loadLines: string[] = [];
-    if (m.background) loadLines.push(`  this.load.image('bg', '${m.background.url}');`);
-    for (const s of m.sprites) loadLines.push(`  this.load.image('${s.name}', '${s.url}');`);
-
-    // Background create line (only if background sprite generated)
-    const bgCreate = m.background
-      ? `  this.add.image(400, 300, 'bg').setDisplaySize(800, 600).setDepth(-10);`
-      : `  // No background sprite available — add a dark solid background: this.cameras.main.setBackgroundColor('#1a1a2e');`;
-
-    // Build per-entity usage instructions based on what actually succeeded
-    const usageLines: string[] = [];
-    const spriteKeys = new Set(m.sprites.map((s) => s.name));
-
-    if (spriteKeys.has("player")) {
-      usageLines.push("- Player: this.player = this.physics.add.image(x, y, 'player').setDisplaySize(48, 48)");
-    } else {
-      usageLines.push("- Player: use this.add.graphics() (no player sprite was generated)");
-    }
-    const enemyKeys = ["enemy", "enemy2", "enemy3"].filter((k) => spriteKeys.has(k));
-    if (enemyKeys.length > 0) {
-      usageLines.push(`- Enemies (use these keys: ${enemyKeys.map((k) => `'${k}'`).join(", ")}): this.physics.add.image(x, y, '${enemyKeys[0]}').setDisplaySize(48, 48)`);
-    } else {
-      usageLines.push("- Enemies: use this.add.graphics() (no enemy sprite was generated)");
-    }
-    const itemKeys = ["item", "item2"].filter((k) => spriteKeys.has(k));
-    if (itemKeys.length > 0) {
-      usageLines.push(`- Items/collectibles (use these keys: ${itemKeys.map((k) => `'${k}'`).join(", ")}): this.physics.add.image(x, y, '${itemKeys[0]}').setDisplaySize(28, 28)`);
-    }
-
-    spriteSection = `
-SPRITES REQUIRED — Pixel art sprites have been pre-generated for this game. You MUST use them. Using this.add.graphics() or this.add.rectangle() for any entity that has a sprite key below is a CRITICAL FAILURE.
-
-Step 1 — In BootScene preload(), copy these load lines EXACTLY (do not change the keys or URLs):
-${loadLines.join("\n")}
-
-Step 2 — In GameScene create(), add the background as the VERY FIRST LINE before any other object:
-${bgCreate}
-
-Step 3 — Use the sprite keys for every game entity listed below. NEVER use graphics() for these — only images:
-${usageLines.join("\n")}
-
-Rules:
-- this.add.graphics() is ONLY allowed for UI overlays (health bars, score boxes) — NEVER for game entities or background
-- Always call .setDisplaySize(width, height) on every sprite image to control its size
-- For enemy groups: enemies.create(x, y, 'enemy').setDisplaySize(48, 48)
-- setOrigin(0.5) is the default — no need to set it
-`;
-  } else {
-    spriteSection = `  - Use only Phaser graphics primitives (this.add.graphics), no external images\n`;
-  }
+function buildBuilderMessageWithSprites(gdd: string, specs: SpriteSpec[]): string {
+  const placeholderLines = buildPlaceholderPreload(specs);
+  const entityUsage = buildEntityUsage(specs);
 
   return `Build this exact game:
 ${gdd}
 
+SPRITES REQUIRED — The game uses sprite image keys. Colored placeholder shapes load immediately and will be swapped with real pixel art in the background without reloading.
+
+In BootScene preload(), copy these lines EXACTLY (do not change keys or URLs — these placeholders auto-upgrade to real sprites):
+${placeholderLines}
+
+In GameScene create(), add the background as the VERY FIRST LINE before any other physics objects:
+  this.add.image(400, 300, 'bg').setDisplaySize(800, 600).setDepth(-10);
+
+SPRITES REQUIRED — use these sprite keys for every game entity. Using this.add.graphics() or this.add.rectangle() for any entity listed below is a CRITICAL FAILURE:
+${entityUsage}
+
+Rules:
+- this.add.graphics() is ONLY allowed for UI overlays (health bars, score boxes, visual effects) — NEVER for game entities or background
+- Always call .setDisplaySize(width, height) on every sprite image
+- For groups: this.physics.add.group() then group.create(x, y, 'enemy').setDisplaySize(48, 48)
+- Background must be the first object added in GameScene.create(), with .setDepth(-10)
+
 Technical requirements:
 - Use Phaser 3 with this exact config: { type: Phaser.AUTO, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } }, scene: [BootScene, MenuScene, GameScene, GameOverScene] }
-${spriteSection}
 - Player controls must feel responsive and smooth
 - Include these Phaser helpers: this.add.text, this.physics.add.group
 - Game must have exactly these scenes: BootScene (loading), MenuScene (start screen), GameScene (main game), GameOverScene (end screen)
@@ -150,6 +160,28 @@ ${spriteSection}
 - MenuScene MUST NOT use any HTML buttons or DOM elements — only Phaser's built-in input system
 - MenuScene create() MUST register BOTH: this.input.keyboard.once('keydown-SPACE', () => this.scene.start('GameScene')) AND this.input.on('pointerdown', () => this.scene.start('GameScene'))
 - Start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
+- The Phaser game instance MUST be assigned to: var game = new Phaser.Game(config);
+Return only raw JavaScript code starting with the word const or class, absolutely nothing else`;
+}
+
+function buildBuilderMessageNoSprites(gdd: string): string {
+  return `Build this exact game:
+${gdd}
+
+Technical requirements:
+- Use Phaser 3 with this exact config: { type: Phaser.AUTO, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } }, scene: [BootScene, MenuScene, GameScene, GameOverScene] }
+- Use only Phaser graphics primitives (this.add.graphics), no external images
+- Player controls must feel responsive and smooth
+- Include these Phaser helpers: this.add.text, this.physics.add.group
+- Game must have exactly these scenes: BootScene (loading), MenuScene (start screen), GameScene (main game), GameOverScene (end screen)
+- Every scene must be a proper Phaser class that extends Phaser.Scene
+- Physics collisions must use this.physics.add.collider and this.physics.add.overlap
+- Player input must use this.cursors = this.input.keyboard.createCursorKeys()
+- Score must be tracked and displayed
+- MenuScene MUST NOT use any HTML buttons or DOM elements — only Phaser's built-in input system
+- MenuScene create() MUST register BOTH: this.input.keyboard.once('keydown-SPACE', () => this.scene.start('GameScene')) AND this.input.on('pointerdown', () => this.scene.start('GameScene'))
+- Start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
+- The Phaser game instance MUST be assigned to: var game = new Phaser.Game(config);
 Return only raw JavaScript code starting with the word const or class, absolutely nothing else`;
 }
 
@@ -203,9 +235,10 @@ export interface Generate2DResult {
   title: string;
   qualityScore: number;
   gamePlan: string;
-  sprites: GeneratedSprite[];
-  backgroundSprite: GeneratedSprite | null;
-  gameContext: import("./generateGameSprites").GameContext | null;
+  /** true when REPLICATE_API_KEY is set — sprites are generated in the background */
+  needsSpriteGeneration: boolean;
+  /** Extracted game context (palette, setting, mood) — stored in DB for cover/sprite consistency */
+  gameContext: GameContext | null;
 }
 
 export async function generate2DGame(
@@ -247,29 +280,31 @@ export async function generate2DGame(
 
   logger?.info({ planLength: gamePlan.length }, "Step 1 complete — design document ready");
 
-  // ── Step 1b: Sprite generation (parallel with Step 2 setup) ────────────────
-  let spriteManifest: SpriteManifest | undefined;
-  let gameContext: GameContext | null = null;
+  // ── Step 1b: Extract sprite specs + GameContext for the builder ─────────────
+  // Sprites are NOT generated here — they run in the background after the game
+  // saves. We only need the specs so the builder knows which placeholder keys
+  // to include and which entities need physics sprites vs graphics primitives.
 
-  if (process.env.REPLICATE_API_KEY) {
+  let spriteSpecs: SpriteSpec[] = [];
+  let gameContext: GameContext | null = null;
+  const hasReplicate = !!process.env.REPLICATE_API_KEY;
+
+  if (hasReplicate) {
+    emitStatus("Planning visuals...");
     try {
-      const { sprites, backgroundSprite, context } = await generateGameSprites(
-        apiKey,
-        gamePlan,
-        prompt,
-        emitStatus,
-      );
-      spriteManifest = { sprites, background: backgroundSprite };
+      const { sprites, context } = await identifyVisualElements(apiKey, gamePlan, prompt);
+      spriteSpecs = sprites;
       gameContext = context;
-      logger?.info({ spriteCount: sprites.length, hasBackground: !!backgroundSprite }, "Sprites generated");
+      logger?.info({ specCount: sprites.length }, "Visual specs extracted");
     } catch (err) {
-      logger?.warn({ err }, "Sprite generation failed — falling back to graphics primitives");
-      spriteManifest = undefined;
+      logger?.warn({ err }, "Spec extraction failed — building without sprites");
     }
   }
 
   // ── Step 2: Build the game ──────────────────────────────────────────────────
   emitStatus("Building game code...");
+
+  const useSprites = spriteSpecs.length > 0;
 
   async function buildGame(): Promise<string> {
     const response = await anthropic.messages.create({
@@ -277,7 +312,12 @@ export async function generate2DGame(
       max_tokens: 16000,
       temperature: 0.9,
       system: BUILDER_SYSTEM,
-      messages: [{ role: "user", content: buildBuilderMessage(gamePlan, spriteManifest) }],
+      messages: [{
+        role: "user",
+        content: useSprites
+          ? buildBuilderMessageWithSprites(gamePlan, spriteSpecs)
+          : buildBuilderMessageNoSprites(gamePlan),
+      }],
     });
     const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
     return stripFences(raw);
@@ -306,6 +346,11 @@ export async function generate2DGame(
   // Escape any </script> that would prematurely close the wrapper's script tag
   logic = logic.replace(/<\/script>/gi, "<\\/script>");
 
+  // Inject the live sprite swap listener (receives postMessage from GameEditor)
+  if (useSprites) {
+    logic += SPRITE_SWAP_LISTENER;
+  }
+
   // Wrap in minimal Phaser HTML page
   const gameCode = WRAPPER_HEAD + logic + WRAPPER_FOOT;
 
@@ -319,15 +364,14 @@ export async function generate2DGame(
   const finalLogic = logic.replace(new RegExp("<\\/script>", "gi"), closeTag);
   const qualityScore = computeQualityScore(finalLogic, getValidationFailure(finalLogic), retried);
 
-  logger?.info({ title, qualityScore }, "2D game generated successfully");
+  logger?.info({ title, qualityScore, needsSpriteGeneration: useSprites }, "2D game generated successfully");
 
   return {
     gameCode,
     title,
     qualityScore,
     gamePlan,
-    sprites: spriteManifest?.sprites ?? [],
-    backgroundSprite: spriteManifest?.background ?? null,
+    needsSpriteGeneration: useSprites,
     gameContext,
   };
 }

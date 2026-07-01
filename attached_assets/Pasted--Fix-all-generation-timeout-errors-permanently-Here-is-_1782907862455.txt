@@ -1,0 +1,105 @@
+
+
+"Fix all generation timeout errors permanently. Here is the complete solution:
+Problem: Generation times out because we are trying to do too many things at once — Claude writes the game, Replicate generates 5-8 images, all in one long request that exceeds the server timeout
+Solution — split generation into stages and stream progress to the user:
+Stage 1 — Game logic first (10-15 seconds):
+
+Generate the game code with Claude immediately
+Get the game running with placeholder colored shapes right away
+Show the user a working playable game as fast as possible
+Display a progress bar and status message: 'Your game is ready! Now enhancing visuals...'
+
+Stage 2 — Visuals in background (30-60 seconds):
+
+After the game is already running, generate all sprites and images in the background
+Use a job queue system so image generation happens separately from the main request
+As each sprite finishes generating, automatically swap it into the running game live without reloading
+Show a small notification for each one: 'Player sprite ready', 'Enemy sprite ready' etc
+The user can play the game while sprites are still loading in
+
+Stage 3 — Polish (after all sprites done):
+
+Generate the game cover image last
+Update the gallery card with the final cover
+
+Technical fixes:
+
+Move all Replicate image generation to a background worker queue using Bull or similar
+Set Claude API timeout to 120 seconds with automatic retry 3 times before failing
+Set Replicate API timeout to 90 seconds per image with automatic retry twice
+Use Server Sent Events to stream progress updates to the frontend in real time
+Never block the main generation request waiting for images
+If Claude times out, automatically retry with a shorter more focused prompt
+Add exponential backoff on retries: wait 2 seconds, then 4 seconds, then 8 seconds
+Store generation progress in the database so if the page refreshes the user can see where it is up to
+
+Frontend progress UI:
+Show a detailed progress panel during generation:
+
+Game logic: [loading bar]
+Player sprite: [loading bar]
+Enemy sprites: [loading bar]
+Background: [loading bar]
+Game cover: [loading bar]
+Each bar fills as that stage completes
+The user can click Play as soon as game logic is done without waiting for images"
+
+
+Second — add the assets panel. Type this after the first fix is done:
+
+"Add a complete Assets panel in the game editor. Here is exactly what it should look like and do:
+Layout:
+
+Add an Assets tab in the right sidebar next to the code editor
+Clicking Assets switches the right panel from code view to the assets panel
+The assets panel has sections that can be expanded and collapsed:
+
+Player
+Enemies
+Collectibles and Items
+Background
+Game Cover
+Sounds and Music
+UI Elements
+
+
+
+Each asset shows:
+
+A thumbnail preview of the image or a waveform for sounds
+The asset name
+What it is used for in the game
+How many times it appears in the game
+A Regenerate button
+An Edit prompt button that lets the user modify the generation prompt and regenerate
+A Replace button to upload their own image instead
+A Download button to save the asset
+
+Regenerate flow:
+
+User clicks Regenerate on an enemy sprite
+A small panel slides out showing the current generation prompt that was used
+User can edit the prompt if they want, for example adding more detail or changing the style
+Click Confirm to regenerate
+The new sprite generates and automatically swaps into the running game live
+Old sprite is kept in history so user can revert if they prefer the old one
+
+Sound assets:
+
+Show waveform visualization for each sound
+Play button to preview the sound
+Sounds include: background music, player jump, player hurt, enemy death, collect item, game over, level complete
+Each sound has a Regenerate button that uses ElevenLabs or a sound generation API to create a new version
+Volume slider for each sound
+
+Bulk actions at the top of the panel:
+
+Regenerate all sprites button — regenerates every image at once
+Regenerate all sounds button
+Download all assets as zip
+Change art style button — opens a prompt where user types a new art style like make everything look like watercolor painting and regenerates all sprites in that style consistently
+
+Asset consistency button:
+
+A button called Make Consistent that sends all current sprite descriptions to Claude and asks it to rewrite all the prompts so they share the same color palette, art style, and visual theme, then regenerates everything"

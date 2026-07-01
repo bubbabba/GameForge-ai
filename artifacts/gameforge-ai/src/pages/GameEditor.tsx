@@ -57,6 +57,9 @@ import {
   ImageIcon,
   Wand2,
   Plus,
+  Download,
+  Layers,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -616,6 +619,258 @@ function ChatPanel({
   );
 }
 
+// ── Assets Panel ──────────────────────────────────────────────────────────────
+
+interface SpriteEntry {
+  name: string;
+  url: string;        // objectPath, e.g. /objects/images/uuid
+  description: string;
+}
+
+interface AssetsSectionProps {
+  title: string;
+  items: SpriteEntry[];
+  isRegenerating: boolean;
+  onRegenerate: (desc: string, name: string) => void;
+  onDownload: (url: string, filename: string) => void;
+}
+
+function AssetsSection({ title, items, isRegenerating, onRegenerate, onDownload }: AssetsSectionProps) {
+  const [open, setOpen] = useState(true);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="border-b border-white/10">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 w-full px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        {title}
+        <span className="ml-auto text-[9px] text-white/20">{items.length}</span>
+      </button>
+      {open && (
+        <div className="px-2 pb-2 space-y-1.5">
+          {items.map((sprite) => (
+            <div key={sprite.name} className="rounded bg-white/5 overflow-hidden">
+              <div className="flex gap-2 p-2">
+                <img
+                  src={`/api/storage${sprite.url}`}
+                  alt={sprite.name}
+                  className="w-12 h-12 rounded object-cover shrink-0 bg-white/10"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-mono text-white/60">{sprite.name}</div>
+                  <div className="text-[9px] text-white/30 mt-0.5 leading-tight line-clamp-2">{sprite.description}</div>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <button
+                      onClick={() => {
+                        if (editingName === sprite.name) { setEditingName(null); }
+                        else { setEditingName(sprite.name); setEditPrompt(sprite.description); }
+                      }}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 bg-white/5 hover:bg-emerald-400/10 border border-white/10 hover:border-emerald-400/20 rounded text-[9px] text-white/40 hover:text-emerald-400 transition-colors"
+                    >
+                      <Wand2 className="w-2.5 h-2.5" />
+                      Regen
+                    </button>
+                    <button
+                      onClick={() => onDownload(`/api/storage${sprite.url}`, sprite.name)}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] text-white/40 hover:text-white/60 transition-colors"
+                    >
+                      <Download className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {editingName === sprite.name && (
+                <div className="px-2 pb-2 flex gap-1">
+                  <textarea
+                    value={editPrompt}
+                    onChange={(e) => setEditPrompt(e.target.value)}
+                    rows={2}
+                    className="flex-1 bg-white/5 border border-white/10 focus:border-emerald-400/40 rounded px-2 py-1 text-[10px] text-white/80 placeholder-white/20 resize-none focus:outline-none"
+                    placeholder="Describe what you want…"
+                  />
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => { onRegenerate(editPrompt, sprite.name); setEditingName(null); }}
+                      disabled={isRegenerating || !editPrompt.trim()}
+                      className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 rounded text-[9px] text-emerald-400 disabled:opacity-40 transition-colors"
+                    >
+                      {isRegenerating ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : "Go"}
+                    </button>
+                    <button
+                      onClick={() => setEditingName(null)}
+                      className="px-2 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] text-white/40 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AssetsPanelProps {
+  sprites: SpriteEntry[];
+  coverImageUrl: string | null;
+  isGeneratingSprites: boolean;
+  spriteGenStatus: string | null;
+  isGeneratingCover: boolean;
+  isRegeneratingSingleSprite: boolean;
+  generationStatus?: string | null;
+  onRegenerateCover: () => void;
+  onRegenerateSprite: (desc: string, name: string) => void;
+  onDownloadAsset: (url: string, filename: string) => void;
+  onRetryGeneration?: () => void;
+}
+
+function AssetsPanel({
+  sprites,
+  coverImageUrl,
+  isGeneratingSprites,
+  spriteGenStatus,
+  isGeneratingCover,
+  isRegeneratingSingleSprite,
+  generationStatus,
+  onRegenerateCover,
+  onRegenerateSprite,
+  onDownloadAsset,
+  onRetryGeneration,
+}: AssetsPanelProps) {
+  const bgSprite = sprites.filter((s) => s.name === "bg");
+  const playerSprites = sprites.filter((s) => s.name === "player");
+  const enemySprites = sprites.filter((s) => s.name.startsWith("enemy"));
+  const itemSprites = sprites.filter((s) => s.name.startsWith("item"));
+  const hasAnySprites = sprites.length > 0;
+
+  return (
+    <div className="flex-1 overflow-y-auto min-h-0 text-xs">
+      {/* Generation progress */}
+      {isGeneratingSprites && (
+        <div className="m-2 p-2 bg-emerald-900/20 border border-emerald-400/20 rounded">
+          <div className="flex items-center gap-1.5">
+            <Loader2 className="w-3 h-3 animate-spin text-emerald-400 shrink-0" />
+            <span className="text-[10px] font-mono text-emerald-300 truncate">
+              {spriteGenStatus ?? "Generating sprites…"}
+            </span>
+          </div>
+          <p className="text-[9px] text-white/30 mt-1 ml-4.5">
+            Sprites appear live as they finish — keep playing!
+          </p>
+        </div>
+      )}
+
+      {/* Error state with retry */}
+      {!isGeneratingSprites && generationStatus === "sprites_error" && (
+        <div className="m-2 p-2 bg-red-900/20 border border-red-400/20 rounded">
+          <p className="text-[10px] text-red-300 mb-1.5">Sprite generation failed</p>
+          {onRetryGeneration && (
+            <button
+              onClick={onRetryGeneration}
+              className="flex items-center gap-1 px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-400/30 rounded text-[10px] text-red-300 transition-colors"
+            >
+              <RefreshCcw className="w-3 h-3" />
+              Retry Generation
+            </button>
+          )}
+        </div>
+      )}
+
+      {!hasAnySprites && !isGeneratingSprites && generationStatus !== "sprites_error" && (
+        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+          <Layers className="w-6 h-6 text-white/15 mb-2" />
+          <p className="text-[10px] text-white/30">No sprites yet</p>
+          <p className="text-[9px] text-white/20 mt-0.5">Generate sprites from the Chat panel</p>
+        </div>
+      )}
+
+      {/* Sprite sections */}
+      <AssetsSection
+        title="Background"
+        items={bgSprite}
+        isRegenerating={isRegeneratingSingleSprite}
+        onRegenerate={onRegenerateSprite}
+        onDownload={onDownloadAsset}
+      />
+      <AssetsSection
+        title="Player"
+        items={playerSprites}
+        isRegenerating={isRegeneratingSingleSprite}
+        onRegenerate={onRegenerateSprite}
+        onDownload={onDownloadAsset}
+      />
+      <AssetsSection
+        title="Enemies"
+        items={enemySprites}
+        isRegenerating={isRegeneratingSingleSprite}
+        onRegenerate={onRegenerateSprite}
+        onDownload={onDownloadAsset}
+      />
+      <AssetsSection
+        title="Items"
+        items={itemSprites}
+        isRegenerating={isRegeneratingSingleSprite}
+        onRegenerate={onRegenerateSprite}
+        onDownload={onDownloadAsset}
+      />
+
+      {/* Game cover */}
+      {(coverImageUrl || isGeneratingCover) && (
+        <div className="border-b border-white/10">
+          <div className="flex items-center gap-1.5 px-3 py-2 text-[10px] font-semibold text-white/40 uppercase tracking-wider">
+            <ImageIcon className="w-3 h-3" />
+            Game Cover
+          </div>
+          <div className="px-2 pb-2">
+            <div className="relative group rounded overflow-hidden">
+              {coverImageUrl && (
+                <img
+                  src={`/api/storage${coverImageUrl}`}
+                  alt="Cover"
+                  className="w-full h-24 object-cover rounded"
+                />
+              )}
+              {isGeneratingCover && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded">
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-1 mt-1.5">
+              <button
+                onClick={onRegenerateCover}
+                disabled={isGeneratingCover}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 bg-white/5 hover:bg-emerald-400/10 border border-white/10 hover:border-emerald-400/20 rounded text-[9px] text-white/40 hover:text-emerald-400 disabled:opacity-40 transition-colors"
+              >
+                <RefreshCcw className="w-2.5 h-2.5" />
+                Regen
+              </button>
+              {coverImageUrl && (
+                <button
+                  onClick={() => onDownloadAsset(`/api/storage${coverImageUrl}`, "cover")}
+                  className="flex items-center gap-0.5 px-1.5 py-0.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] text-white/40 hover:text-white/60 transition-colors"
+                >
+                  <Download className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main editor ───────────────────────────────────────────────────────────────
 export default function GameEditor() {
   const [, params] = useRoute("/game/:id");
@@ -665,12 +920,13 @@ export default function GameEditor() {
         return r.json() as Promise<{ spriteUrl: string }>;
       }),
     onSuccess: (data: { spriteUrl: string }, description: string) => {
+      const newSprite: SpriteEntry = { name: `custom_${Date.now()}`, url: data.spriteUrl, description };
       setSprites((prev) => {
-        const updated = [{ url: data.spriteUrl, description }, ...prev];
+        const updated = [newSprite, ...prev];
         // Persist updated sprite list to DB so they reload on next visit
         if (id) {
           const spritesJson = JSON.stringify(
-            updated.map((s, i) => ({ name: `sprite_${i}`, url: s.url, description: s.description })),
+            updated.map((s) => ({ name: s.name, url: s.url, description: s.description })),
           );
           apiFetch(`/api/games/${id}`, {
             method: "PATCH",
@@ -699,6 +955,15 @@ export default function GameEditor() {
   const [savedTitle, setSavedTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [rightTab, setRightTab] = useState<"code" | "assets">("code");
+
+  // Background sprite generation state
+  const [isGeneratingSprites, setIsGeneratingSprites] = useState(false);
+  const [spriteGenStatus, setSpriteGenStatus] = useState<string | null>(null);
+  const spriteGenStartedForId = useRef<number | null>(null);
+
+  // Ref for live sprite injection into the iframe via postMessage
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Undo / Redo history (refs for perf — counts trigger re-renders)
   const undoStack = useRef<string[]>([]);
@@ -718,7 +983,7 @@ export default function GameEditor() {
   });
   const [isThinking, setIsThinking] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
-  const [sprites, setSprites] = useState<Array<{ url: string; description: string }>>([]);
+  const [sprites, setSprites] = useState<SpriteEntry[]>([]);
 
   const initializedForId = useRef<number | null>(null);
 
@@ -736,12 +1001,12 @@ export default function GameEditor() {
       setIframeKey((k) => k + 1);
       setCodeVersion(game.codeVersion ?? 0);
       setCoverImageUrl(game.coverImageUrl ?? null);
-      // Load auto-generated sprites from DB (exclude background sprite from the panel)
+      // Load auto-generated sprites from DB — include bg for the Assets panel
       try {
         const stored: Array<{ name: string; url: string; description: string }> = game.spritesJson
           ? JSON.parse(game.spritesJson)
           : [];
-        setSprites(stored.filter((s) => s.name !== "bg").map(({ url, description }) => ({ url, description })));
+        setSprites(stored.map(({ name, url, description }) => ({ name: name ?? "sprite", url, description })));
       } catch {
         setSprites([]);
       }
@@ -1010,6 +1275,117 @@ export default function GameEditor() {
     [handleChatSend],
   );
 
+  // ── Regenerate a specific sprite ───────────────────────────────────────────
+  const handleRegenSprite = useCallback(
+    async (description: string, name: string) => {
+      if (!id) return;
+      try {
+        const r = await apiFetch(`/api/games/${id}/generate-sprite`, {
+          method: "POST",
+          body: JSON.stringify({ description }),
+        });
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error((e as any).error || "Sprite generation failed");
+        }
+        const data: { spriteUrl: string } = await r.json();
+        // Update local state
+        setSprites((prev) => {
+          const updated = prev.map((s) =>
+            s.name === name ? { ...s, url: data.spriteUrl, description } : s,
+          );
+          // Add if not found (shouldn't happen)
+          if (!updated.find((s) => s.name === name)) {
+            updated.unshift({ name, url: data.spriteUrl, description });
+          }
+          // Persist to DB
+          const spritesJson = JSON.stringify(updated.map((s) => ({ name: s.name, url: s.url, description: s.description })));
+          apiFetch(`/api/games/${id}`, { method: "PATCH", body: JSON.stringify({ spritesJson }) }).catch(() => {});
+          return updated;
+        });
+        // Inject into live iframe
+        const url = `${window.location.origin}/api/storage${data.spriteUrl}`;
+        iframeRef.current?.contentWindow?.postMessage({ type: "spriteReady", name, url }, "*");
+        toast({ title: "Sprite regenerated!", description: `${name} updated.` });
+      } catch (err: any) {
+        toast({ title: "Regen failed", description: err?.message || "Please try again.", variant: "destructive" });
+      }
+    },
+    [id],
+  );
+
+  // ── Download asset ─────────────────────────────────────────────────────────
+  const handleDownloadAsset = useCallback((url: string, filename: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, []);
+
+  // ── Background sprite generation ───────────────────────────────────────────
+  // Auto-triggers when the editor loads a game with generationStatus = 'sprites_pending'.
+  const handleSpriteGeneration = useCallback(async () => {
+    if (!id || isGeneratingSprites) return;
+    setIsGeneratingSprites(true);
+    setSpriteGenStatus("Starting sprite generation…");
+    try {
+      await streamPost<{ sprites: Array<{ name: string; url: string; objectPath: string; description: string }> }>(
+        `/api/games/${id}/generate-sprites`,
+        {},
+        (msg) => setSpriteGenStatus(msg),
+        undefined,
+        (event) => {
+          if (event.type === "sprite_ready") {
+            const s = event as { name: string; url: string; objectPath: string; description: string };
+            // Inject live into the running iframe
+            iframeRef.current?.contentWindow?.postMessage(
+              { type: "spriteReady", name: s.name, url: s.url },
+              "*",
+            );
+            // Update local sprite list immediately
+            setSprites((prev) => {
+              const updated = [
+                ...prev.filter((p) => p.name !== s.name),
+                { name: s.name, url: s.objectPath, description: s.description },
+              ];
+              return updated;
+            });
+          }
+        },
+      );
+      // Refresh game data to get updated generationStatus + spritesJson
+      queryClient.invalidateQueries({ queryKey: getGetGameQueryKey(id) });
+      setSpriteGenStatus(null);
+      // Switch to Assets tab when sprites are ready
+      setRightTab("assets");
+    } catch (err: any) {
+      setSpriteGenStatus(null);
+      toast({
+        title: "Sprite generation failed",
+        description: err?.error || err?.message || "Could not generate sprites. You can retry from the Assets panel.",
+        variant: "destructive",
+      });
+      // Refresh so the editor sees the sprites_error status
+      if (id) queryClient.invalidateQueries({ queryKey: getGetGameQueryKey(id) });
+    } finally {
+      setIsGeneratingSprites(false);
+    }
+  }, [id, isGeneratingSprites, queryClient, toast]);
+
+  // Auto-trigger sprite generation when game first loads as sprites_pending
+  useEffect(() => {
+    if (!game || !game.id) return;
+    if (game.generationStatus !== "sprites_pending") return;
+    if (spriteGenStartedForId.current === game.id) return;
+    if (isGeneratingSprites) return;
+    spriteGenStartedForId.current = game.id;
+    handleSpriteGeneration();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.id, game?.generationStatus]);
+
   // ── Loading / error states ────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -1148,6 +1524,7 @@ export default function GameEditor() {
                 </div>
               )}
               <iframe
+                ref={iframeRef}
                 key={iframeKey}
                 srcDoc={previewCode}
                 className="w-full h-full border-none"
@@ -1162,40 +1539,84 @@ export default function GameEditor() {
           {/* Right: vertically split code editor + chat */}
           <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
             <ResizablePanelGroup direction="vertical">
-              {/* Top: syntax-highlighted code editor */}
+              {/* Top: tab-switched code editor / assets panel */}
               <ResizablePanel defaultSize={50} minSize={20}>
                 <div className="flex flex-col h-full bg-[#0d0d0d]">
-                  <div className="h-8 bg-[#111] border-b border-white/10 flex items-center px-3 shrink-0 gap-2">
-                    <Code2 className="w-3.5 h-3.5 text-white/30" />
-                    <span className="text-[11px] font-mono text-white/40">
-                      index.html
-                    </span>
-                    {isThinking && (
+                  {/* Tab bar */}
+                  <div className="h-8 bg-[#111] border-b border-white/10 flex items-center px-2 shrink-0 gap-1">
+                    <button
+                      onClick={() => setRightTab("code")}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors",
+                        rightTab === "code"
+                          ? "text-emerald-400 bg-emerald-400/10"
+                          : "text-white/40 hover:text-white/60",
+                      )}
+                    >
+                      <Code2 className="w-3 h-3" />
+                      Code
+                    </button>
+                    <button
+                      onClick={() => setRightTab("assets")}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors",
+                        rightTab === "assets"
+                          ? "text-emerald-400 bg-emerald-400/10"
+                          : "text-white/40 hover:text-white/60",
+                      )}
+                    >
+                      <Layers className="w-3 h-3" />
+                      Assets
+                      {isGeneratingSprites && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      )}
+                    </button>
+                    {isThinking && rightTab === "code" && (
                       <span className="ml-auto text-[10px] text-emerald-400/70 font-mono animate-pulse">
                         ● updating…
                       </span>
                     )}
                   </div>
-                  <div
-                    className={cn(
-                      "flex-1 overflow-auto min-h-0",
-                      isThinking && "opacity-50 pointer-events-none",
-                    )}
-                  >
-                    <CodeMirror
-                      value={code}
-                      onChange={(value) => setCode(value)}
-                      extensions={[htmlLang()]}
-                      theme={oneDark}
-                      height="100%"
-                      style={{ height: "100%", fontSize: "12px" }}
-                      basicSetup={{
-                        lineNumbers: true,
-                        foldGutter: true,
-                        autocompletion: true,
+
+                  {rightTab === "code" ? (
+                    <div
+                      className={cn(
+                        "flex-1 overflow-auto min-h-0",
+                        isThinking && "opacity-50 pointer-events-none",
+                      )}
+                    >
+                      <CodeMirror
+                        value={code}
+                        onChange={(value) => setCode(value)}
+                        extensions={[htmlLang()]}
+                        theme={oneDark}
+                        height="100%"
+                        style={{ height: "100%", fontSize: "12px" }}
+                        basicSetup={{
+                          lineNumbers: true,
+                          foldGutter: true,
+                          autocompletion: true,
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <AssetsPanel
+                      sprites={sprites}
+                      coverImageUrl={coverImageUrl}
+                      isGeneratingSprites={isGeneratingSprites}
+                      spriteGenStatus={spriteGenStatus}
+                      isGeneratingCover={generateCoverMutation.isPending}
+                      isRegeneratingSingleSprite={false}
+                      generationStatus={game?.generationStatus}
+                      onRegenerateCover={() => id != null && generateCoverMutation.mutate()}
+                      onRegenerateSprite={handleRegenSprite}
+                      onDownloadAsset={handleDownloadAsset}
+                      onRetryGeneration={() => {
+                        spriteGenStartedForId.current = null;
+                        handleSpriteGeneration();
                       }}
                     />
-                  </div>
+                  )}
                 </div>
               </ResizablePanel>
 

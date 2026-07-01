@@ -19,6 +19,7 @@ export async function streamPost<T>(
   body: unknown,
   onStatus?: (msg: string) => void,
   signal?: AbortSignal,
+  onEvent?: (event: Record<string, unknown>) => void,
 ): Promise<T> {
   // Attach the Clerk bearer token — same mechanism used by React Query hooks
   const token = await getAuthToken().catch(() => null);
@@ -95,6 +96,11 @@ export async function streamPost<T>(
       if (payload.type === "result") {
         const { type: _t, ...rest } = payload;
         return rest as T;
+      }
+      // Pass any other typed event to the optional generic callback
+      if (payload.type) {
+        onEvent?.(payload);
+        continue;
       }
     }
     return null;

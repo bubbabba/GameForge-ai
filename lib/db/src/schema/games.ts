@@ -25,6 +25,8 @@ export const gamesTable = pgTable("games", {
   gamePlan: text("game_plan"),
   /** Serialized GameContext JSON — setting, player, enemies, art style, palette, mood */
   gameContext: text("game_context"),
+  /** 'complete' | 'sprites_pending' — set to sprites_pending when game saves without sprites */
+  generationStatus: text("generation_status").notNull().default("complete"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

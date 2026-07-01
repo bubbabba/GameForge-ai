@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-zod";
 import { generate3DGame } from "../lib/generate3d";
 import { generate2DGame } from "../lib/generate2d";
+import { generateSpritesForGame } from "../lib/generateGameSprites";
 import { generateAndSaveCover } from "../lib/imageGeneration";
 
 const router: IRouter = Router();
@@ -186,8 +187,7 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       genre,
       qualityScore: result.qualityScore,
       gamePlan: result.gamePlan,
-      sprites: result.sprites,
-      backgroundSprite: result.backgroundSprite,
+      needsSpriteGeneration: result.needsSpriteGeneration,
       gameContextJson: result.gameContext ? JSON.stringify(result.gameContext) : undefined,
     });
   } catch (err) {
@@ -290,6 +290,7 @@ router.post("/games", requireAuth, async (req: any, res): Promise<void> => {
     .insert(gamesTable)
     .values({
       ...parsed.data,
+      generationStatus: parsed.data.generationStatus ?? "complete",
       status: "draft",
       slug,
       authorId: req.userId,
@@ -393,6 +394,7 @@ router.patch("/games/:id", requireAuth, async (req: any, res): Promise<void> => 
     updates.currentCode = body.data.gameCode; // keep live version in sync with manual saves
   }
   if (body.data.spritesJson !== undefined) updates.spritesJson = body.data.spritesJson ?? null;
+  if (body.data.generationStatus !== undefined) updates.generationStatus = body.data.generationStatus;
 
   const [updated] = await db
     .update(gamesTable)
@@ -429,6 +431,130 @@ router.post("/games/:id/publish", requireAuth, async (req: any, res): Promise<vo
     .returning();
 
   res.json(published);
+});
+
+// ── Background Sprite Generation (SSE) ───────────────────────────────────
+// Generates pixel-art sprites for a saved game in the background.
+// Emits {type:"sprite_ready"} for each sprite as it completes; each sprite
+// is also immediately persisted to the DB so partial progress survives disconnects.
+
+router.post("/games/:id/generate-sprites", requireAuth, async (req: any, res): Promise<void> => {
+  const params = GetGameParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid game ID" });
+    return;
+  }
+
+  const apiKey = process.env.CLAUDE_API_KEY;
+  if (!apiKey || !process.env.REPLICATE_API_KEY) {
+    res.status(503).json({ error: "Image generation not configured" });
+    return;
+  }
+
+  const [game] = await db
+    .select()
+    .from(gamesTable)
+    .where(and(eq(gamesTable.id, params.data.id), eq(gamesTable.authorId, req.userId)));
+
+  if (!game) {
+    res.status(404).json({ error: "Game not found" });
+    return;
+  }
+
+  if (!game.gamePlan) {
+    res.status(400).json({ error: "Game has no design document — cannot generate sprites" });
+    return;
+  }
+
+  // Atomically claim the generation job — prevents concurrent duplicate runs.
+  // Allow: sprites_pending, sprites_error, complete (explicit re-run).
+  // Reject: generating (already in progress).
+  const [claimed] = await db
+    .update(gamesTable)
+    .set({ generationStatus: "generating" })
+    .where(
+      and(
+        eq(gamesTable.id, game.id),
+        sql`${gamesTable.generationStatus} != 'generating'`,
+      ),
+    )
+    .returning({ id: gamesTable.id });
+
+  if (!claimed) {
+    res.status(409).json({ error: "Sprite generation already in progress for this game" });
+    return;
+  }
+
+  const stopHeartbeat = startSSE(res);
+  res.on("close", stopHeartbeat);
+
+  try {
+    const allSprites: Array<{ name: string; url: string; objectPath: string; description: string }> = [];
+
+    const { sprites, backgroundSprite } = await generateSpritesForGame(
+      apiKey,
+      game.gamePlan,
+      game.prompt,
+      game.gameContext,
+      (msg) => sseStatus(res, msg),
+      async (sprite) => {
+        // Persist immediately — read fresh spritesJson to avoid race conditions
+        try {
+          const [current] = await db
+            .select({ sj: gamesTable.spritesJson })
+            .from(gamesTable)
+            .where(eq(gamesTable.id, game.id));
+          const existing: Array<{ name: string; url: string; description: string }> =
+            current?.sj ? JSON.parse(current.sj) : [];
+          const updated = [
+            ...existing.filter((s) => s.name !== sprite.name),
+            { name: sprite.name, url: sprite.objectPath, description: sprite.description },
+          ];
+          await db
+            .update(gamesTable)
+            .set({ spritesJson: JSON.stringify(updated) })
+            .where(eq(gamesTable.id, game.id));
+        } catch (dbErr) {
+          req.log.warn({ dbErr, spriteName: sprite.name }, "Sprite DB update failed (non-critical)");
+        }
+
+        allSprites.push({ name: sprite.name, url: sprite.url, objectPath: sprite.objectPath, description: sprite.description });
+
+        // Emit to client (ignore if connection already closed)
+        if (!res.writableEnded) {
+          try {
+            res.write(`data: ${JSON.stringify({
+              type: "sprite_ready",
+              name: sprite.name,
+              url: sprite.url,
+              objectPath: sprite.objectPath,
+              description: sprite.description,
+            })}\n\n`);
+          } catch { /* client disconnected */ }
+        }
+      },
+    );
+
+    // Mark generation complete
+    await db
+      .update(gamesTable)
+      .set({ generationStatus: "complete" })
+      .where(eq(gamesTable.id, game.id));
+
+    stopHeartbeat();
+    sseResult(res, { sprites, backgroundSprite });
+  } catch (err) {
+    // Reset to sprites_error so the user can retry
+    await db
+      .update(gamesTable)
+      .set({ generationStatus: "sprites_error" })
+      .where(eq(gamesTable.id, game.id))
+      .catch(() => {/* ignore secondary failure */});
+    stopHeartbeat();
+    const message = (err as Error)?.message ?? "Sprite generation failed";
+    req.log.error({ err }, "generate-sprites route error");
+    sseError(res, message);
+  }
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────

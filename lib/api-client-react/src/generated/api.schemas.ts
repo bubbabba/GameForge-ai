@@ -87,6 +87,8 @@ export interface Game {
   gamePlan?: string | null;
   /** Serialized GameContext JSON used to keep all images consistent with the game world */
   gameContext?: string | null;
+  /** 'complete' | 'sprites_pending' — indicates whether background sprite generation is still needed */
+  generationStatus?: string;
   status: GameStatus;
   slug: string;
   likesCount: number;
@@ -125,12 +127,14 @@ export interface GameInput {
   spritesJson?: string | null;
   gamePlan?: string | null;
   gameContext?: string | null;
+  generationStatus?: string;
 }
 
 export interface GamePatch {
   title?: string;
   gameCode?: string;
   spritesJson?: string | null;
+  generationStatus?: string;
 }
 
 export interface GameChatRequest {
