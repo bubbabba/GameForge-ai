@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-zod";
 import { generate3DGame } from "../lib/generate3d";
 import { generate2DGame } from "../lib/generate2d";
+import { generateAndSaveCover } from "../lib/imageGeneration";
 
 const router: IRouter = Router();
 
@@ -128,6 +129,7 @@ router.get("/games/public", async (req, res): Promise<void> => {
       authorId: gamesTable.authorId,
       authorName: gamesTable.authorName,
       createdAt: gamesTable.createdAt,
+      coverImageUrl: gamesTable.coverImageUrl,
     })
     .from(gamesTable)
     .where(
@@ -165,6 +167,7 @@ router.get("/games/my", requireAuth, async (req: any, res): Promise<void> => {
       authorId: gamesTable.authorId,
       authorName: gamesTable.authorName,
       createdAt: gamesTable.createdAt,
+      coverImageUrl: gamesTable.coverImageUrl,
     })
     .from(gamesTable)
     .where(eq(gamesTable.authorId, req.userId))
@@ -201,6 +204,13 @@ router.post("/games", requireAuth, async (req: any, res): Promise<void> => {
     .returning();
 
   res.status(201).json(game);
+
+  // Fire-and-forget cover generation — does not block the response
+  if (process.env.REPLICATE_API_KEY) {
+    generateAndSaveCover(game.id, game.title, game.genre).catch((err: unknown) => {
+      req.log.warn({ err, gameId: game.id }, "Auto cover generation failed (non-blocking)");
+    });
+  }
 });
 
 // ── Get by Slug (public shareable URL — published only) ───────────────────

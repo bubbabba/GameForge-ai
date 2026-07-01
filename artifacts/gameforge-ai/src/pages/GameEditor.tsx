@@ -53,9 +53,12 @@ import {
   Mic,
   MicOff,
   X,
+  ImageIcon,
+  Wand2,
+  Plus,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 // ── Chat message type ─────────────────────────────────────────────────────────
@@ -97,12 +100,76 @@ const QUICK_CHIPS = [
 ];
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function Sidebar() {
+interface SidebarProps {
+  coverImageUrl: string | null;
+  isGeneratingCover: boolean;
+  onRegenerateCover: () => void;
+  sprites: Array<{ url: string; description: string }>;
+  isGeneratingSprite: boolean;
+  onGenerateSprite: (description: string) => void;
+  onAddSpriteToGame: (url: string, description: string) => void;
+}
+
+function Sidebar({
+  coverImageUrl,
+  isGeneratingCover,
+  onRegenerateCover,
+  sprites,
+  isGeneratingSprite,
+  onGenerateSprite,
+  onAddSpriteToGame,
+}: SidebarProps) {
   const [filesOpen, setFilesOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [spritesOpen, setSpritesOpen] = useState(false);
+  const [spriteInput, setSpriteInput] = useState("");
 
   return (
     <aside className="w-44 shrink-0 bg-[#111] border-r border-white/10 flex flex-col text-xs overflow-y-auto">
+      {/* Cover image */}
+      <div className="p-2 border-b border-white/10">
+        {coverImageUrl ? (
+          <div
+            className={`relative group rounded overflow-hidden ${isGeneratingCover ? "cursor-not-allowed" : "cursor-pointer"}`}
+            onClick={isGeneratingCover ? undefined : onRegenerateCover}
+          >
+            <img
+              src={`/api/storage${coverImageUrl}`}
+              alt="Game cover"
+              className="w-full h-20 object-cover rounded"
+            />
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1 transition-opacity rounded">
+              {isGeneratingCover ? (
+                <Loader2 className="w-3 h-3 animate-spin text-white" />
+              ) : (
+                <RefreshCcw className="w-3 h-3 text-white" />
+              )}
+              <span className="text-[10px] text-white">
+                {isGeneratingCover ? "Generating…" : "New Cover"}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={onRegenerateCover}
+            disabled={isGeneratingCover}
+            className="w-full h-16 rounded border border-dashed border-white/20 flex flex-col items-center justify-center gap-1 text-white/30 hover:text-white/50 hover:border-white/30 disabled:opacity-40 transition-colors"
+          >
+            {isGeneratingCover ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span className="text-[9px]">Generating…</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="w-3 h-3" />
+                <span className="text-[9px]">Generate Cover</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
       <button
         onClick={() => setFilesOpen((o) => !o)}
         className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors w-full"
@@ -150,6 +217,76 @@ function Sidebar() {
               <span className="truncate">{label}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      <div className="border-t border-white/10 mx-2" />
+
+      {/* Sprites */}
+      <button
+        onClick={() => setSpritesOpen((o) => !o)}
+        className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors w-full"
+      >
+        {spritesOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        Sprites
+      </button>
+      {spritesOpen && (
+        <div className="px-2 pb-2 space-y-1.5">
+          <div className="flex gap-1">
+            <input
+              value={spriteInput}
+              onChange={(e) => setSpriteInput(e.target.value)}
+              placeholder="Describe sprite…"
+              className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white/60 placeholder-white/20 focus:outline-none focus:border-emerald-400/40"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && spriteInput.trim() && !isGeneratingSprite) {
+                  onGenerateSprite(spriteInput.trim());
+                  setSpriteInput("");
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (spriteInput.trim() && !isGeneratingSprite) {
+                  onGenerateSprite(spriteInput.trim());
+                  setSpriteInput("");
+                }
+              }}
+              disabled={!spriteInput.trim() || isGeneratingSprite}
+              className="px-1.5 bg-emerald-400/10 rounded border border-emerald-400/20 text-emerald-400/60 hover:bg-emerald-400/20 disabled:opacity-30 transition-colors"
+            >
+              {isGeneratingSprite ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Wand2 className="w-3 h-3" />
+              )}
+            </button>
+          </div>
+          {sprites.length > 0 ? (
+            <div className="grid grid-cols-3 gap-1 pt-0.5">
+              {sprites.map((sprite, i) => (
+                <button
+                  key={i}
+                  onClick={() => onAddSpriteToGame(sprite.url, sprite.description)}
+                  className="relative group rounded overflow-hidden border border-white/10 hover:border-emerald-400/40 transition-colors"
+                  title={`Click to add "${sprite.description}" to game`}
+                >
+                  <img
+                    src={`/api/storage${sprite.url}`}
+                    alt={sprite.description}
+                    className="w-full aspect-square object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <Plus className="w-3 h-3 text-emerald-400" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[9px] text-white/20 text-center pt-0.5">
+              Describe a sprite and press Enter
+            </p>
+          )}
         </div>
       )}
 
@@ -493,6 +630,53 @@ export default function GameEditor() {
   const publishGame = usePublishGame();
   const chatEdit = useChatEditGame();
 
+  const generateCoverMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/games/${id}/generate-cover`, { method: "POST" }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error((e as any).error || "Cover generation failed");
+        }
+        return r.json() as Promise<{ coverImageUrl: string }>;
+      }),
+    onSuccess: (data: { coverImageUrl: string }) => {
+      setCoverImageUrl(data.coverImageUrl);
+      toast({ title: "Cover generated!", description: "New cover art is ready." });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Cover generation failed",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const generateSpriteMutation = useMutation({
+    mutationFn: (description: string) =>
+      fetch(`/api/games/${id}/generate-sprite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description }),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error((e as any).error || "Sprite generation failed");
+        }
+        return r.json() as Promise<{ spriteUrl: string }>;
+      }),
+    onSuccess: (data: { spriteUrl: string }, description: string) => {
+      setSprites((prev) => [{ url: data.spriteUrl, description }, ...prev]);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Sprite generation failed",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Editor state ──────────────────────────────────────────────────────────
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
@@ -521,6 +705,8 @@ export default function GameEditor() {
     return [makeWelcome(plan)];
   });
   const [isThinking, setIsThinking] = useState(false);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [sprites, setSprites] = useState<Array<{ url: string; description: string }>>([]);
 
   const initializedForId = useRef<number | null>(null);
 
@@ -537,6 +723,8 @@ export default function GameEditor() {
       setPreviewCode(liveCode);
       setIframeKey((k) => k + 1);
       setCodeVersion(game.codeVersion ?? 0);
+      setCoverImageUrl(game.coverImageUrl ?? null);
+      setSprites([]);  // reset sprites when switching games to avoid cross-game leakage
       // Always anchor originalCode to this specific game's initial code
       originalCode.current = liveCode;
       // Clear history stacks — they belong to the previous game
@@ -792,6 +980,16 @@ export default function GameEditor() {
     [id, isThinking, chatEdit, doSave],
   );
 
+  const handleAddSpriteToGame = useCallback(
+    (spriteUrl: string, description: string) => {
+      const fullUrl = `${window.location.origin}/api/storage${spriteUrl}`;
+      handleChatSend(
+        `Add this sprite to the game as a visual element. The sprite shows: ${description}. Load it using this URL: ${fullUrl}`,
+      );
+    },
+    [handleChatSend],
+  );
+
   // ── Loading / error states ────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -905,7 +1103,15 @@ export default function GameEditor() {
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
         {/* Left sidebar */}
-        <Sidebar />
+        <Sidebar
+          coverImageUrl={coverImageUrl}
+          isGeneratingCover={generateCoverMutation.isPending}
+          onRegenerateCover={() => id != null && generateCoverMutation.mutate()}
+          sprites={sprites}
+          isGeneratingSprite={generateSpriteMutation.isPending}
+          onGenerateSprite={(desc) => id != null && generateSpriteMutation.mutate(desc)}
+          onAddSpriteToGame={handleAddSpriteToGame}
+        />
 
         {/* Center + Right via horizontal resizable panels */}
         <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">

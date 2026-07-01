@@ -75,6 +75,8 @@ export interface Game {
   currentCode?: string | null;
   /** Increments each time an AI chat edit is successfully applied */
   codeVersion?: number;
+  /** Object-storage path for the AI-generated cover image */
+  coverImageUrl?: string | null;
   status: GameStatus;
   slug: string;
   likesCount: number;

@@ -17,6 +17,8 @@ export const gamesTable = pgTable("games", {
   currentCode: text("current_code"),
   /** Increments each time an AI chat edit is successfully applied */
   codeVersion: integer("code_version").notNull().default(0),
+  /** Object-storage path for the AI-generated cover image (e.g. /objects/images/{uuid}) */
+  coverImageUrl: text("cover_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

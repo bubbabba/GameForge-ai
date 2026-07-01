@@ -467,6 +467,10 @@ components:
         codeVersion:
           type: integer
           description: Increments each time an AI chat edit is successfully applied
+        coverImageUrl:
+          type: string
+          nullable: true
+          description: Object-storage path for the AI-generated cover image
         status:
           type: string
           enum: [draft, published]

@@ -4,3 +4,4 @@
 - [Game generation architecture](game-generation-architecture.md) — 2D: two-step (plan GDD then build full JS), no shells, claude-sonnet-4-6, temp 0.9; gamePlan in API then sessionStorage then editor chat.
 - [Chat route DB-authoritative code](chat-route-db-code.md) — Chat route fetches currentCode from DB (not client), validates HTML, retries once, persists codeVersion; currentCode is optional/deprecated in API contract.
 - [Lib rebuild order](lib-rebuild-order.md) — After any schema change: rebuild lib/db → api-zod → api-client-react (tsc -p tsconfig.json each). Then typecheck api-server and gameforge-ai. Never skip db rebuild when gamesTable changes.
+- [Image generation setup](image-generation.md) — Replicate (stability-ai/sdxl) for covers + sprites; GCS via objectStorageClient.bucket().file().save(); zod must be a direct dep of api-server; images are public assets (no ACL on /storage/objects/*).

@@ -15,6 +15,7 @@ export interface Game {
   gameCode: string;
   currentCode?: string | null;
   codeVersion?: number;
+  coverImageUrl?: string | null;
   status: GameStatus;
   slug: string;
   likesCount: number;

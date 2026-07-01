@@ -17,6 +17,7 @@ interface GameCardProps {
     slug?: string;
     likesCount: number;
     authorName: string;
+    coverImageUrl?: string | null;
   };
   variant?: "public" | "draft" | "published";
   onDelete?: (id: number) => void;
@@ -68,7 +69,15 @@ export default function GameCard({ game, variant = "public", onDelete, onPublish
 
   return (
     <div className="group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(34,197,94,0.1)] transition-all duration-300 hover:-translate-y-1">
-      <div className={cn("h-32 p-4 flex flex-col justify-between relative bg-gradient-to-b", gradientClass)}>
+      <div className={cn("h-32 p-4 flex flex-col justify-between relative bg-gradient-to-b overflow-hidden", gradientClass)}>
+        {/* AI-generated cover image (shown behind content) */}
+        {game.coverImageUrl && (
+          <img
+            src={`/api/storage${game.coverImageUrl}`}
+            alt={`${game.title} cover`}
+            className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
+          />
+        )}
         <div className="flex justify-between items-start z-10">
           <span className={cn("px-2.5 py-1 text-xs font-semibold rounded-full border", genreStyle)}>
             {game.genre}
