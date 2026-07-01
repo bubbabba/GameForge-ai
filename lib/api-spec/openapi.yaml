@@ -257,6 +257,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /games/{id}/chat:
+    post:
+      operationId: chatEditGame
+      tags: [games]
+      summary: Use AI to apply a natural-language edit to a game
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GameChatRequest"
+      responses:
+        "200":
+          description: Updated game code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameChatResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Game not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: AI edit failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /games/{id}/like:
     post:
       operationId: toggleLike
@@ -469,6 +518,24 @@ components:
         title:
           type: string
         gameCode:
+          type: string
+
+    GameChatRequest:
+      type: object
+      required: [message, currentCode]
+      properties:
+        message:
+          type: string
+          minLength: 1
+        currentCode:
+          type: string
+          minLength: 1
+
+    GameChatResponse:
+      type: object
+      required: [updatedCode]
+      properties:
+        updatedCode:
           type: string
 
     LikeResult:

@@ -192,6 +192,27 @@ export const PublishGameResponse = zod.object({
 
 
 /**
+ * @summary Use AI to apply a natural-language edit to a game
+ */
+export const ChatEditGameParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+
+export const ChatEditGameBody = zod.object({
+  "message": zod.string().min(1),
+  "currentCode": zod.string().min(1)
+})
+
+export const ChatEditGameResponse = zod.object({
+  "updatedCode": zod.string()
+})
+
+
+/**
  * @summary Toggle like on a published game
  */
 export const ToggleLikeParams = zod.object({

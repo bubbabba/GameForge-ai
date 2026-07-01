@@ -22,6 +22,8 @@ import type {
 import type {
   ErrorResponse,
   Game,
+  GameChatRequest,
+  GameChatResponse,
   GameGenerated,
   GameInput,
   GamePatch,
@@ -724,6 +726,77 @@ export const usePublishGame = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getPublishGameMutationOptions(options));
+    }
+
+export const getChatEditGameUrl = (id: number,) => {
+
+
+
+
+  return `/api/games/${id}/chat`
+}
+
+/**
+ * @summary Use AI to apply a natural-language edit to a game
+ */
+export const chatEditGame = async (id: number,
+    gameChatRequest: GameChatRequest, options?: RequestInit): Promise<GameChatResponse> => {
+
+  return customFetch<GameChatResponse>(getChatEditGameUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(gameChatRequest)
+  }
+);}
+
+
+
+
+export const getChatEditGameMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof chatEditGame>>, TError,{id: number;data: BodyType<GameChatRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof chatEditGame>>, TError,{id: number;data: BodyType<GameChatRequest>}, TContext> => {
+
+const mutationKey = ['chatEditGame'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof chatEditGame>>, {id: number;data: BodyType<GameChatRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  chatEditGame(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChatEditGameMutationResult = NonNullable<Awaited<ReturnType<typeof chatEditGame>>>
+    export type ChatEditGameMutationBody = BodyType<GameChatRequest>
+    export type ChatEditGameMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Use AI to apply a natural-language edit to a game
+ */
+export const useChatEditGame = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof chatEditGame>>, TError,{id: number;data: BodyType<GameChatRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof chatEditGame>>,
+        TError,
+        {id: number;data: BodyType<GameChatRequest>},
+        TContext
+      > => {
+      return useMutation(getChatEditGameMutationOptions(options));
     }
 
 export const getToggleLikeUrl = (id: number,) => {

@@ -8,6 +8,8 @@
 
 export * from './errorResponse';
 export * from './game';
+export * from './gameChatRequest';
+export * from './gameChatResponse';
 export * from './gameGenerated';
 export * from './gameInput';
 export * from './gamePatch';

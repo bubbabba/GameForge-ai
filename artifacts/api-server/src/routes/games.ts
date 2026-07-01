@@ -14,6 +14,8 @@ import {
   ToggleLikeParams,
   GetGameBySlugParams,
   ListPublicGamesQueryParams,
+  ChatEditGameParams,
+  ChatEditGameBody,
 } from "@workspace/api-zod";
 import { generate3DGame } from "../lib/generate3d";
 
@@ -467,6 +469,104 @@ router.post("/games/:id/like", requireAuth, async (req: any, res): Promise<void>
   }
 
   res.json({ liked, likesCount: newCount });
+});
+
+// ── AI Chat Editor ──────────────────────────────────────────────────────────
+
+const CHAT_SYSTEM_PROMPT = [
+  "You are a game editor AI. The user has an existing browser game built with HTML, CSS, and JavaScript.",
+  "Your job is to apply the user's requested change and return the COMPLETE updated game code.",
+  "Rules:",
+  "- Output ONLY the raw HTML document — no prose, no markdown fences (no ```), no explanation before or after",
+  "- The first character of your response must be '<' and the first line must be '<!DOCTYPE html>'",
+  "- Preserve all existing game mechanics unless the user explicitly asks to change them",
+  "- Make the change precise and surgical — do not rewrite sections the user didn't ask about",
+  "- The returned code must be fully playable in a browser sandbox with no external dependencies beyond CDN scripts already present",
+].join(" ");
+
+const MAX_CHAT_MESSAGE_CHARS = 2_000; // reasonable limit for a natural-language edit request
+const MAX_CHAT_CODE_CHARS = 80_000; // ~20k tokens of code context
+
+router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
+  const apiKey = process.env.CLAUDE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "CLAUDE_API_KEY is not configured." });
+    return;
+  }
+
+  const params = ChatEditGameParams.safeParse({ id: req.params.id });
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid game id" });
+    return;
+  }
+
+  const body = ChatEditGameBody.safeParse(req.body);
+  if (!body.success) {
+    const first = body.error.issues[0];
+    res.status(400).json({ error: `${first?.path?.[0] ?? "request"}: ${first?.message}` });
+    return;
+  }
+
+  const { message, currentCode } = body.data;
+
+  if (message.length > MAX_CHAT_MESSAGE_CHARS) {
+    res.status(400).json({ error: `Message too long. Max ${MAX_CHAT_MESSAGE_CHARS} characters.` });
+    return;
+  }
+
+  // Verify the game belongs to this user
+  const [game] = await db
+    .select({ id: gamesTable.id, authorId: gamesTable.authorId })
+    .from(gamesTable)
+    .where(eq(gamesTable.id, params.data.id));
+
+  if (!game) {
+    res.status(404).json({ error: "Game not found" });
+    return;
+  }
+  if (game.authorId !== req.userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Truncate code if absurdly large (shouldn't happen in practice)
+  const codeContext = currentCode.length > MAX_CHAT_CODE_CHARS
+    ? currentCode.slice(0, MAX_CHAT_CODE_CHARS) + "\n<!-- [truncated] -->"
+    : currentCode;
+
+  req.log.info({ gameId: params.data.id, messageLength: message.length }, "AI chat edit requested");
+
+  const anthropic = new Anthropic({ apiKey });
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 16000,
+      system: CHAT_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Here is the current game code:\n\n${codeContext}\n\n---\n\nUser request: ${message}\n\nReturn the complete updated HTML game code now:`,
+        },
+      ],
+    });
+
+    const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    if (!raw.startsWith("<")) {
+      req.log.warn({ gameId: params.data.id }, "AI chat returned non-HTML response");
+      res.status(500).json({ error: "AI returned an unexpected response. Please try again." });
+      return;
+    }
+
+    // Escape </script> sequences so they don't break iframe srcdoc
+    const updatedCode = raw.replace(/<\/script>/gi, "<\\/script>");
+
+    req.log.info({ gameId: params.data.id, chars: updatedCode.length }, "AI chat edit applied");
+    res.json({ updatedCode });
+  } catch (err: any) {
+    req.log.error({ err, gameId: params.data.id }, "AI chat edit failed");
+    res.status(500).json({ error: "AI edit failed. Please try again." });
+  }
 });
 
 export default router;

@@ -105,6 +105,17 @@ export interface GamePatch {
   gameCode?: string;
 }
 
+export interface GameChatRequest {
+  /** @minLength 1 */
+  message: string;
+  /** @minLength 1 */
+  currentCode: string;
+}
+
+export interface GameChatResponse {
+  updatedCode: string;
+}
+
 export interface LikeResult {
   liked: boolean;
   likesCount: number;
