@@ -9,18 +9,23 @@ function getReplicateClient(): Replicate {
   return new Replicate({ auth: apiKey });
 }
 
-async function runModel(client: Replicate, model: string, input: Record<string, unknown>): Promise<string> {
+// Flux Schnell returns an array of FileOutput objects; .url() gives the URL string.
+async function runFlux(
+  client: Replicate,
+  input: Record<string, unknown>,
+): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const output = (await client.run(model as any, { input })) as unknown[];
+  const output = (await client.run("black-forest-labs/flux-schnell", { input })) as any[];
   const first = output?.[0];
   if (!first) throw new Error("Replicate returned no output");
-  // Newer replicate client returns FileOutput objects; String() gives the URL
+  // FileOutput has .url() method; fall back to String() for plain URLs
+  if (typeof first.url === "function") return first.url().toString();
   return typeof first === "string" ? first : String(first);
 }
 
 /**
- * Generate a game cover via Replicate SDXL, upload to GCS, and persist the
- * objectPath to games.coverImageUrl.  Returns the new objectPath.
+ * Generate a game cover via Replicate Flux Schnell, upload to GCS, and persist
+ * the objectPath to games.coverImageUrl.  Returns the new objectPath.
  */
 export async function generateAndSaveCover(
   gameId: number,
@@ -29,18 +34,15 @@ export async function generateAndSaveCover(
 ): Promise<string> {
   const replicate = getReplicateClient();
 
-  const prompt = `Epic dramatic game cover art for a video game called "${title}", ${genre} genre. Cinematic dark atmosphere, moody lighting, professional digital painting, ultra-detailed, no text, no letters, no watermarks, 16:9 landscape format`;
-  const negativePrompt =
-    "text, letters, words, watermark, signature, logo, ugly, blurry, low quality, cropped, distorted";
+  const prompt = `Epic dramatic game cover art for a video game called "${title}", ${genre} genre. Cinematic dark atmosphere, moody lighting, professional digital painting, ultra-detailed, no text, no letters, no watermarks, landscape widescreen`;
 
-  const imageUrl = await runModel(replicate, "stability-ai/sdxl", {
+  const imageUrl = await runFlux(replicate, {
     prompt,
-    negative_prompt: negativePrompt,
-    width: 1024,
-    height: 576,
-    num_inference_steps: 30,
-    guidance_scale: 7.5,
+    aspect_ratio: "16:9",
     num_outputs: 1,
+    output_format: "png",
+    output_quality: 90,
+    go_fast: true,
   });
 
   const objectPath = await uploadImageFromUrl(imageUrl, "image/png");
@@ -54,24 +56,21 @@ export async function generateAndSaveCover(
 }
 
 /**
- * Generate a pixel-art sprite via Replicate SDXL and upload to GCS.
+ * Generate a pixel-art sprite via Replicate Flux Schnell and upload to GCS.
  * Returns the objectPath (e.g. "/objects/images/{uuid}").
  */
 export async function generateSprite(description: string): Promise<string> {
   const replicate = getReplicateClient();
 
-  const prompt = `pixel art sprite of ${description}, retro video game style, clean pixel art, bright bold colors, simple design, game character sprite, white background, 64x64 pixel art style`;
-  const negativePrompt =
-    "realistic, photo, 3d render, blurry, ugly, complex background, text, words, low resolution";
+  const prompt = `pixel art sprite of ${description}, retro video game style, clean pixel art, bright bold colors, simple design, game character sprite sheet, transparent-style white background`;
 
-  const imageUrl = await runModel(replicate, "stability-ai/sdxl", {
+  const imageUrl = await runFlux(replicate, {
     prompt,
-    negative_prompt: negativePrompt,
-    width: 1024,
-    height: 1024,
-    num_inference_steps: 25,
-    guidance_scale: 7.5,
+    aspect_ratio: "1:1",
     num_outputs: 1,
+    output_format: "png",
+    output_quality: 90,
+    go_fast: true,
   });
 
   return uploadImageFromUrl(imageUrl, "image/png");
