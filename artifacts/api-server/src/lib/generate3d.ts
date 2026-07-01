@@ -147,56 +147,88 @@ export interface Generate3DResult {
   title: string;
 }
 
-export async function generate3DGame(
-  apiKey: string,
-  prompt: string,
-  genre: string,
-): Promise<Generate3DResult> {
-  const shell = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
-  const systemPrompt = GENRE_SYSTEM_PROMPTS[genre] ?? DEFAULT_GENRE_PROMPT;
+// ─── Internal helpers ─────────────────────────────────────────────────────
 
-  const userMessage = `Game description from user: "${prompt}"
+function buildUserMessage(prompt: string, simplified = false): string {
+  const desc = simplified
+    ? `Simple game idea: ${prompt.slice(0, 300)}`
+    : `Game description from user: "${prompt}"`;
+
+  return `${desc}
 
 Implement the game logic now. Output ONLY raw JavaScript — no HTML, no markdown fences, no import statements, no explanations. Your code will be injected into a pre-built Three.js HTML shell.
 
 Key reminder:
-- The following are already defined for you: THREE, scene, camera, renderer, clock, keys, hud, controlsEl, showOverlay, hideOverlay, W, H
+- Already defined: THREE, scene, camera, renderer, clock, keys, hud, controlsEl, showOverlay, hideOverlay, W, H
 - You MUST define: function gameUpdate(delta) { ... }
 - You SHOULD define: function gameRestart() { ... }
-- Add ALL your game objects to scene with scene.add(...)
-- Keep it simple — basic BoxGeometry/SphereGeometry shapes work perfectly
-- Make it genuinely fun and playable
+- Add ALL game objects to scene with scene.add(...)
+- Use basic BoxGeometry/SphereGeometry shapes — no external assets
+- No placeholder comments or TODO stubs — every function must be fully implemented
 
 Start your JavaScript code immediately:`;
+}
 
-  const anthropic = new Anthropic({ apiKey });
+function stripFences(text: string): string {
+  let s = text.trim();
+  if (s.startsWith("```")) {
+    s = s
+      .replace(/^```(?:javascript|js|typescript|ts)?\r?\n/, "")
+      .replace(/\r?\n```\s*$/, "")
+      .trim();
+  }
+  return s;
+}
+
+async function callClaude3D(
+  anthropic: Anthropic,
+  systemPrompt: string,
+  userMessage: string,
+): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 8192,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
   });
-
   const content = message.content[0];
   if (!content || content.type !== "text") {
     throw new Error("Unexpected response format from Claude");
   }
+  return stripFences(content.text);
+}
 
-  let logic = content.text.trim();
+// ─── Public API ───────────────────────────────────────────────────────────
 
-  // Strip any accidental markdown fences (handles ```js, ```javascript, ```, no fence)
-  if (logic.startsWith("```")) {
-    logic = logic
-      .replace(/^```(?:javascript|js|typescript|ts)?\r?\n/, "")
-      .replace(/\r?\n```\s*$/, "")
-      .trim();
+export interface Generate3DResult {
+  gameCode: string;
+  title: string;
+}
+
+export async function generate3DGame(
+  apiKey: string,
+  prompt: string,
+  genre: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  logger?: any,
+): Promise<Generate3DResult> {
+  const shell = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
+  const systemPrompt = GENRE_SYSTEM_PROMPTS[genre] ?? DEFAULT_GENRE_PROMPT;
+  const anthropic = new Anthropic({ apiKey });
+
+  let logic: string;
+  try {
+    logic = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, false));
+    logger?.info({ chars: logic.length }, "3D game generated (attempt 1)");
+  } catch (firstErr) {
+    logger?.warn({ err: firstErr }, "First 3D attempt failed — retrying with simplified prompt");
+    logic = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, true));
+    logger?.info({ chars: logic.length }, "3D game generated (attempt 2 — simplified)");
   }
 
   // ── Shell-injection safety ──────────────────────────────────────────────
-  // Claude's output goes directly into an HTML <script> block, so any literal
-  // </script> in Claude's code (even inside a JS string or comment) would
-  // prematurely close the script tag and corrupt the page.
-  // Replace every occurrence with the JS-safe unicode escape equivalent.
+  // Any literal </script> in Claude's JS (even in strings/comments) would
+  // prematurely close the outer <script> tag; escape it away.
   logic = logic.replace(/<\/script>/gi, "<\\/script>");
 
   // Inject into shell

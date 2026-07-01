@@ -79,59 +79,80 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
   req.log.info({ genre, engine: engine ?? "2d", promptLength: prompt.length }, "Generating game with Claude");
 
+  // ── shared helpers ───────────────────────────────────────────────────────
+
+  const PHASER_SYSTEM_PROMPT = [
+    "You are an expert Phaser.js game developer. Your ONLY output is a complete, self-contained HTML document — no prose, no markdown fences, no explanations before or after.",
+    "Be efficient: write concise, working code. Do not pad responses with verbose comments or boilerplate beyond what the game needs.",
+    "The first character of your response must be '<' and the first line must be '<!DOCTYPE html>'.",
+    "Every game you produce is fully playable from the first frame — no placeholders, no TODO comments, no incomplete functions.",
+  ].join(" ");
+
+  function buildPhaserPrompt(userPrompt: string, userGenre: string, simplified = false): string {
+    const genreHint = GENRE_HINTS[userGenre] ?? userGenre;
+    const desc = simplified
+      ? `Create a simple, fun ${userGenre} game. Core idea: ${userPrompt.slice(0, 300)}`
+      : `User's game description: "${userPrompt}"`;
+
+    return [
+      desc,
+      `Genre: ${userGenre} — ${genreHint}`,
+      "",
+      "REQUIREMENTS (all mandatory):",
+      "1. Output ONLY raw HTML starting with <!DOCTYPE html> — zero markdown, zero prose",
+      "2. Phaser 3 CDN: https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js",
+      "3. All JS inline in a single <script> tag; no external files",
+      "4. Canvas exactly 800×500 px; body background #090909; canvas centered",
+      "5. Full genre-appropriate mechanics — no stub functions",
+      "6. Keyboard controls (arrow keys / WASD / Space); small on-screen control hint text",
+      "7. Score and lives / health system with visible HUD",
+      "8. Clear game-over screen and win condition",
+      "9. Graphics via Phaser built-in API only (graphics.fillRect, add.text, etc.) — no external images",
+      "",
+      "Generate the complete HTML now:",
+    ].join("\n");
+  }
+
+  async function callPhaser(anthropic: Anthropic, userPrompt: string, userGenre: string, simplified = false): Promise<string> {
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 8192,
+      system: PHASER_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: buildPhaserPrompt(userPrompt, userGenre, simplified) }],
+    });
+    const content = message.content[0];
+    if (!content || content.type !== "text") throw new Error("Unexpected response format from Claude");
+    let code = content.text.trim();
+    if (code.startsWith("```")) {
+      code = code.replace(/^```(?:html)?\n?/, "").replace(/\n?```$/, "").trim();
+    }
+    return code;
+  }
+
   try {
     // ── 3D path: inject Claude logic into a hardcoded Three.js shell ──────
     if (is3D) {
-      const result = await generate3DGame(apiKey, prompt, genre);
+      const result = await generate3DGame(apiKey, prompt, genre, req.log);
       req.log.info({ title: result.title }, "3D game generated successfully");
       res.json(result);
       return;
     }
 
     // ── 2D path: full Phaser.js HTML generation ───────────────────────────
-    const genreHint = GENRE_HINTS[genre] ?? genre;
-
-    const phaser2DPrompt = [
-      "You are an expert Phaser.js game developer. Generate a complete, self-contained, playable browser game using Phaser 3.",
-      "",
-      `User's game description: "${prompt}"`,
-      `Genre: ${genre} (${genreHint})`,
-      "",
-      "REQUIREMENTS:",
-      "1. Output ONLY a complete HTML document — no explanations, no markdown, no code blocks, just raw HTML starting with <!DOCTYPE html>",
-      "2. Use Phaser 3 from CDN: https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js",
-      "3. The game must be fully self-contained in the HTML — all JavaScript inline in a <script> tag",
-      "4. Game canvas must be exactly 800x500 pixels",
-      "5. Include proper game mechanics matching the genre",
-      "6. Add keyboard controls (arrow keys, WASD, or spacebar as appropriate)",
-      "7. Include a score or lives system where applicable",
-      "8. Add game over / win conditions",
-      "9. Use colorful, visually appealing graphics drawn with Phaser's built-in graphics API (no external image assets needed)",
-      "10. Make the game actually fun and playable",
-      "11. Add on-screen instructions (small text showing controls)",
-      "12. Set document body background to #090909 (dark) and center the canvas",
-      "",
-      `Genre guidance for ${genre}: ${genreHint}`,
-      "",
-      "Generate the complete HTML game now. Start immediately with <!DOCTYPE html>",
-    ].join("\n");
-
     const anthropic = new Anthropic({ apiKey });
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 8192,
-      messages: [{ role: "user", content: phaser2DPrompt }],
-    });
 
-    const content = message.content[0];
-    if (!content || content.type !== "text") {
-      res.status(500).json({ error: "Unexpected response format from Claude" });
-      return;
-    }
-
-    let gameCode = content.text.trim();
-    if (gameCode.startsWith("```")) {
-      gameCode = gameCode.replace(/^```(?:html)?\n?/, "").replace(/\n?```$/, "").trim();
+    let gameCode: string;
+    try {
+      gameCode = await callPhaser(anthropic, prompt, genre, false);
+      req.log.info({ chars: gameCode.length }, "2D game generated (attempt 1)");
+    } catch (firstErr) {
+      req.log.warn({ err: firstErr }, "First 2D attempt failed — retrying with simplified prompt");
+      try {
+        gameCode = await callPhaser(anthropic, prompt, genre, true);
+        req.log.info({ chars: gameCode.length }, "2D game generated (attempt 2 — simplified)");
+      } catch (secondErr) {
+        throw secondErr; // bubble up to outer catch
+      }
     }
 
     const titleWords = prompt.split(" ").slice(0, 5)
@@ -148,7 +169,7 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       return;
     }
     if (error.status === 429) {
-      res.status(500).json({ error: "Claude rate limit reached. Please wait and try again." });
+      res.status(500).json({ error: "Claude rate limit reached. Please wait a moment and try again." });
       return;
     }
     res.status(500).json({ error: error.message ?? "Game generation failed. Please try again." });
