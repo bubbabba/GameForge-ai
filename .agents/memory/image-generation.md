@@ -5,7 +5,7 @@ description: Replicate API for cover/sprite generation, GCS server-side upload, 
 
 ## Rules
 
-**Replicate model:** `stability-ai/sdxl` for both covers (1024×576) and sprites (1024×1024). Output is `unknown[]`; first element may be a string URL or FileOutput — use `typeof first === 'string' ? first : String(first)` to get the URL safely.
+**Replicate model:** `black-forest-labs/flux-schnell` for both covers and sprites. `stability-ai/sdxl` returns 404 (removed from Replicate). Flux Schnell uses `aspect_ratio` ("16:9" for covers, "1:1" for sprites) instead of `width`/`height`, has no `negative_prompt`, and accepts `go_fast: true`, `output_format`, `output_quality`. Output elements are FileOutput objects — extract URL via `first.url().toString()` (with `typeof first?.url === "function"` guard, falling back to `String(first)`).
 
 **Server-side GCS upload:** Do NOT use presigned PUT URLs (those are for client-side). Instead use `objectStorageClient.bucket(bucketName).file(objectName).save(buffer, { contentType, resumable: false })` directly. Parse `PRIVATE_OBJECT_DIR` as `"/bucketName/path/prefix"` — strip leading slash, split on `/`, first part = bucket name, rest = object name prefix.
 
