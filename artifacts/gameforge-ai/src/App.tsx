@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, useAuth } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect, Link } from 'wouter';
@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Gamepad2 } from 'lucide-react';
+import { setAuthTokenGetter } from '@workspace/api-client-react';
 
 import AppShell from "./components/layout/AppShell";
 import Home from "./pages/Home";
@@ -118,6 +119,21 @@ function AuthPrompt({ message }: { message: string }) {
   );
 }
 
+/**
+ * Wires Clerk's session token into customFetch so every API call gets
+ * an Authorization: Bearer <token> header automatically.
+ */
+function ClerkAuthBridge() {
+  const { getToken } = useAuth();
+
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+    return () => setAuthTokenGetter(null);
+  }, [getToken]);
+
+  return null;
+}
+
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const queryClient = useQueryClient();
@@ -197,6 +213,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
+          <ClerkAuthBridge />
           <ClerkQueryClientCacheInvalidator />
           <AppRoutes />
           <Toaster />
