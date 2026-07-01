@@ -170,7 +170,7 @@ export async function generate2DGame(
   async function buildGame(): Promise<string> {
     const response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0.9,
       system: BUILDER_SYSTEM,
       messages: [{ role: "user", content: buildBuilderMessage(gamePlan) }],

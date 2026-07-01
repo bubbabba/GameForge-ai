@@ -187,7 +187,7 @@ async function callClaude3D(
 ): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 8000,
+    max_tokens: 16000,
     temperature: 0.9,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],

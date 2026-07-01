@@ -476,6 +476,8 @@ function extractHtmlAndSummary(rawFull: string): { html: string; changeSummary: 
 /** Validate that Claude's returned HTML is a complete, working game. */
 function validateChatHtml(html: string, isPhaser: boolean): string | null {
   if (!html.trimStart().startsWith("<")) return "Response is not valid HTML";
+  // Must contain a closing </html> — truncated responses won't have it
+  if (!html.toLowerCase().includes("</html>")) return "Response is truncated (missing </html>)";
   const nonEmpty = html.split("\n").filter((l) => l.trim().length > 0).length;
   if (nonEmpty < 80) return `Code too short: ${nonEmpty} non-empty lines (need 80+)`;
   if (isPhaser) {
@@ -575,7 +577,7 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     // ── Attempt 1 ────────────────────────────────────────────────────────────
     const r1 = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0.9,
       system: CHAT_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
@@ -583,7 +585,9 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     const rawFull1 = r1.content[0]?.type === "text" ? r1.content[0].text.trim() : "";
     const { html: html1, changeSummary: cs1 } = extractHtmlAndSummary(rawFull1);
 
-    let failure = validateChatHtml(html1, isPhaser);
+    // Treat a token-limit cut-off as an immediate validation failure
+    const truncated1 = r1.stop_reason === "max_tokens";
+    let failure = truncated1 ? "Response was cut off (output too long)" : validateChatHtml(html1, isPhaser);
     let finalHtml = html1;
     let finalChangeSummary = cs1;
 
@@ -593,7 +597,7 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
 
       const r2 = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 8000,
+        max_tokens: 16000,
         temperature: 0.9,
         system: CHAT_SYSTEM_PROMPT,
         messages: [
@@ -608,7 +612,8 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
       const rawFull2 = r2.content[0]?.type === "text" ? r2.content[0].text.trim() : "";
       const { html: html2, changeSummary: cs2 } = extractHtmlAndSummary(rawFull2);
 
-      failure = validateChatHtml(html2, isPhaser);
+      const truncated2 = r2.stop_reason === "max_tokens";
+      failure = truncated2 ? "Response was cut off (output too long)" : validateChatHtml(html2, isPhaser);
       finalHtml = html2;
       finalChangeSummary = cs2;
 
@@ -621,8 +626,8 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
-    // ── Escape </script> sequences and persist to DB ──────────────────────────
-    const updatedCode = finalHtml.replace(/<\/script>/gi, "<\\/script>");
+    // ── Persist to DB ─────────────────────────────────────────────────────────
+    const updatedCode = finalHtml;
     const newVersion = (game.codeVersion ?? 0) + 1;
 
     await db
