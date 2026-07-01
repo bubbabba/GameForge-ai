@@ -18,19 +18,9 @@ import {
   ChatEditGameBody,
 } from "@workspace/api-zod";
 import { generate3DGame } from "../lib/generate3d";
+import { generate2DGame } from "../lib/generate2d";
 
 const router: IRouter = Router();
-
-const GENRE_HINTS: Record<string, string> = {
-  Platformer: "side-scrolling platform game with jumping mechanics, platforms, and gravity physics",
-  Horror: "dark atmospheric horror game with tension, scares, and eerie visuals",
-  Shooter: "shooting game where the player can fire projectiles at enemies",
-  Puzzle: "puzzle game that requires logic and thinking to solve challenges",
-  Racing: "top-down or side-view racing game with speed and obstacles",
-  RPG: "role-playing game with character stats, exploration, and combat",
-  Adventure: "exploration adventure game with discovery and story elements",
-  Fantasy: "fantasy world game with magic, creatures, and epic quests",
-};
 
 const MAX_PROMPT_LENGTH = 4000;
 
@@ -84,56 +74,6 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
   req.log.info({ genre, engine: engine ?? "2d", promptLength: prompt.length }, "Generating game with Claude");
 
-  // ── shared helpers ───────────────────────────────────────────────────────
-
-  const PHASER_SYSTEM_PROMPT = [
-    "You are an expert Phaser.js game developer. Your ONLY output is a complete, self-contained HTML document — no prose, no markdown fences, no explanations before or after.",
-    "Be efficient: write concise, working code. Do not pad responses with verbose comments or boilerplate beyond what the game needs.",
-    "The first character of your response must be '<' and the first line must be '<!DOCTYPE html>'.",
-    "Every game you produce is fully playable from the first frame — no placeholders, no TODO comments, no incomplete functions.",
-  ].join(" ");
-
-  function buildPhaserPrompt(userPrompt: string, userGenre: string, simplified = false): string {
-    const genreHint = GENRE_HINTS[userGenre] ?? userGenre;
-    const desc = simplified
-      ? `Create a simple, fun ${userGenre} game. Core idea: ${userPrompt.slice(0, 300)}`
-      : `User's game description: "${userPrompt}"`;
-
-    return [
-      desc,
-      `Genre: ${userGenre} — ${genreHint}`,
-      "",
-      "REQUIREMENTS (all mandatory):",
-      "1. Output ONLY raw HTML starting with <!DOCTYPE html> — zero markdown, zero prose",
-      "2. Phaser 3 CDN: https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js",
-      "3. All JS inline in a single <script> tag; no external files",
-      "4. Canvas exactly 800×500 px; body background #090909; canvas centered",
-      "5. Full genre-appropriate mechanics — no stub functions",
-      "6. Keyboard controls (arrow keys / WASD / Space); small on-screen control hint text",
-      "7. Score and lives / health system with visible HUD",
-      "8. Clear game-over screen and win condition",
-      "9. Graphics via Phaser built-in API only (graphics.fillRect, add.text, etc.) — no external images",
-      "",
-      "Generate the complete HTML now:",
-    ].join("\n");
-  }
-
-  async function callPhaser(anthropic: Anthropic, userPrompt: string, userGenre: string, simplified = false): Promise<string> {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 8192,
-      system: PHASER_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildPhaserPrompt(userPrompt, userGenre, simplified) }],
-    });
-    const content = message.content[0];
-    if (!content || content.type !== "text") throw new Error("Unexpected response format from Claude");
-    let code = content.text.trim();
-    if (code.startsWith("```")) {
-      code = code.replace(/^```(?:html)?\n?/, "").replace(/\n?```$/, "").trim();
-    }
-    return code;
-  }
-
   try {
     // ── 3D path: inject Claude logic into a hardcoded Three.js shell ──────
     if (is3D) {
@@ -143,29 +83,9 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       return;
     }
 
-    // ── 2D path: full Phaser.js HTML generation ───────────────────────────
-    const anthropic = new Anthropic({ apiKey });
-
-    let gameCode: string;
-    try {
-      gameCode = await callPhaser(anthropic, prompt, genre, false);
-      req.log.info({ chars: gameCode.length }, "2D game generated (attempt 1)");
-    } catch (firstErr) {
-      req.log.warn({ err: firstErr }, "First 2D attempt failed — retrying with simplified prompt");
-      try {
-        gameCode = await callPhaser(anthropic, prompt, genre, true);
-        req.log.info({ chars: gameCode.length }, "2D game generated (attempt 2 — simplified)");
-      } catch (secondErr) {
-        throw secondErr; // bubble up to outer catch
-      }
-    }
-
-    const titleWords = prompt.split(" ").slice(0, 5)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-    const title = `${titleWords} (${genre})`;
-
-    req.log.info({ title }, "2D game generated successfully");
-    res.json({ gameCode, title });
+    // ── 2D path: template-based Phaser.js generation ──────────────────────
+    const result = await generate2DGame(apiKey, prompt, genre, req.log);
+    res.json(result);
   } catch (err) {
     const error = err as Error & { status?: number };
     req.log.error({ err }, "Claude API call failed");
@@ -524,7 +444,7 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Game not found" });
     return;
   }
-  if (game.authorId !== req.userId) {
+  if (game.authorId !== (req as any).userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

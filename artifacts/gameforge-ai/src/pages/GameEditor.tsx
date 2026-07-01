@@ -687,7 +687,7 @@ export default function GameEditor() {
               key={iframeKey}
               srcDoc={previewCode}
               className="w-full h-full border-none"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
               title="Game Preview"
             />
           </div>

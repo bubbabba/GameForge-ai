@@ -28,9 +28,15 @@ export const GenerateGameBody = zod.object({
   "engine": zod.enum(['2d', '3d']).default(generateGameBodyEngineDefault)
 })
 
+export const generateGameResponseQualityScoreMin = 0;
+export const generateGameResponseQualityScoreMax = 100;
+
+
+
 export const GenerateGameResponse = zod.object({
   "gameCode": zod.string(),
-  "title": zod.string()
+  "title": zod.string(),
+  "qualityScore": zod.number().min(generateGameResponseQualityScoreMin).max(generateGameResponseQualityScoreMax).optional().describe('AI-assessed quality score (0–100) for the generated game')
 })
 
 

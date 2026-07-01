@@ -74,6 +74,7 @@ export default function Home() {
     genre: string;
     engine: Engine;
     prompt: string;
+    qualityScore?: number;
   } | null>(null);
 
   const selectedGenre = engine === "2d" ? selected2DGenre : selected3DGenre;
@@ -139,6 +140,7 @@ export default function Home() {
               genre: selectedGenre,
               engine,
               prompt,
+              qualityScore: data.qualityScore,
             });
           }
         },
@@ -377,6 +379,21 @@ export default function Home() {
                       ? "Three.js 3D"
                       : "Phaser.js 2D"}
                   </span>
+                  {guestPreview.qualityScore != null && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold border",
+                        guestPreview.qualityScore >= 80
+                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          : guestPreview.qualityScore >= 60
+                          ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                          : "bg-orange-500/20 text-orange-400 border-orange-500/30",
+                      )}
+                      title="AI-assessed quality score"
+                    >
+                      ★ {guestPreview.qualityScore}/100
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -424,7 +441,7 @@ export default function Home() {
               <iframe
                 srcDoc={guestPreview.gameCode}
                 className="w-full h-full border-none bg-black"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts"
                 title="Generated Game"
                 data-testid="game-iframe"
               />

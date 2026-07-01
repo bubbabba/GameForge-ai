@@ -9,4 +9,10 @@
 export interface GameGenerated {
   gameCode: string;
   title: string;
+  /**
+     * AI-assessed quality score (0–100) for the generated game
+     * @minimum 0
+     * @maximum 100
+     */
+  qualityScore?: number;
 }

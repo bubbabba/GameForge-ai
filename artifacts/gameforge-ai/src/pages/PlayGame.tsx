@@ -104,7 +104,7 @@ export default function PlayGame() {
         <iframe
           srcDoc={game.gameCode}
           className="w-full h-full border-none"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
           title={game.title}
         />
       </main>
