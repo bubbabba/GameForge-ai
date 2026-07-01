@@ -7,7 +7,6 @@ import {
   useListPublicGames,
   getListPublicGamesQueryKey,
 } from "@workspace/api-client-react";
-import { GAME_GENRES_2D, GAME_GENRES_3D, GENRE_COLORS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -17,68 +16,31 @@ import {
   LayoutGrid,
   Loader2,
   ArrowRight,
-  Box,
-  Square,
   LogIn,
 } from "lucide-react";
 import GameCard from "@/components/GameCard";
 import { useQueryClient } from "@tanstack/react-query";
-
-type Engine = "2d" | "3d";
-
-const ENGINE_TABS: {
-  id: Engine;
-  label: string;
-  icon: typeof Square;
-  description: string;
-}[] = [
-  {
-    id: "2d",
-    label: "2D",
-    icon: Square,
-    description: "Phaser.js — classic 2D platformers, shooters, puzzles and more",
-  },
-  {
-    id: "3d",
-    label: "3D",
-    icon: Box,
-    description:
-      "Three.js — first-person horror, third-person platformers, space shooters and more",
-  },
-];
-
-const GENRE_DESCRIPTIONS_3D: Record<string, string> = {
-  "FP Horror": "Walk through a dark maze — flashlight on, something is hunting you",
-  Platformer: "Third-person — jump between platforms, collect coins, reach the goal",
-  "Space Shooter": "Fly through space, dodge enemies, and blast them out of the stars",
-  Racing: "Drive a car around a track — beat your lap time",
-  Puzzle: "Push blocks onto targets in a 3D world",
-};
+import { GENRE_COLORS } from "@/lib/constants";
 
 export default function Home() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { isSignedIn } = useAuth();
-  // Keep a ref so callbacks always see the latest sign-in state
   const isSignedInRef = useRef(isSignedIn);
   isSignedInRef.current = isSignedIn;
 
-  const [engine, setEngine] = useState<Engine>("2d");
   const [prompt, setPrompt] = useState("");
-  const [selected2DGenre, setSelected2DGenre] = useState<string>(GAME_GENRES_2D[0]);
-  const [selected3DGenre, setSelected3DGenre] = useState<string>(GAME_GENRES_3D[0]);
+
   // Holds generated data when user is NOT signed in (so we can show preview)
   const [guestPreview, setGuestPreview] = useState<{
     gameCode: string;
     title: string;
     genre: string;
-    engine: Engine;
+    engine: "2d" | "3d";
     prompt: string;
     qualityScore?: number;
     gamePlan?: string;
   } | null>(null);
-
-  const selectedGenre = engine === "2d" ? selected2DGenre : selected3DGenre;
 
   const generateGame = useGenerateGame();
   const saveGame = useSaveGame();
@@ -88,7 +50,6 @@ export default function Home() {
     { query: { queryKey: getListPublicGamesQueryKey({ limit: 6 }) } },
   );
 
-  // Combined busy state: generating OR saving
   const isBusy = generateGame.isPending || saveGame.isPending;
 
   const handleGenerate = () => {
@@ -101,20 +62,21 @@ export default function Home() {
       return;
     }
 
-    // Clear any previous guest preview
     setGuestPreview(null);
 
     generateGame.mutate(
-      { data: { prompt, genre: selectedGenre as any, engine } },
+      { data: { prompt } },
       {
         onSuccess: (data) => {
+          const resolvedGenre = data.genre ?? "Platformer";
+          const resolvedEngine = data.engine ?? "2d";
+
           if (isSignedInRef.current) {
-            // Signed in: auto-save draft and navigate immediately to the editor
             saveGame.mutate(
               {
                 data: {
                   title: data.title,
-                  genre: selectedGenre,
+                  genre: resolvedGenre,
                   prompt,
                   gameCode: data.gameCode,
                 },
@@ -122,7 +84,6 @@ export default function Home() {
               {
                 onSuccess: (saved) => {
                   queryClient.invalidateQueries({ queryKey: ["/api/games/my"] });
-                  // Pass the game plan to the editor via sessionStorage
                   if (data.gamePlan) {
                     sessionStorage.setItem(`gamePlan_${saved.id}`, data.gamePlan);
                   }
@@ -138,12 +99,11 @@ export default function Home() {
               },
             );
           } else {
-            // Not signed in: show preview with sign-in CTA
             setGuestPreview({
               gameCode: data.gameCode,
               title: data.title,
-              genre: selectedGenre,
-              engine,
+              genre: resolvedGenre,
+              engine: resolvedEngine,
               prompt,
               qualityScore: data.qualityScore,
               gamePlan: data.gamePlan,
@@ -160,13 +120,6 @@ export default function Home() {
         },
       },
     );
-  };
-
-  const handleEngineSwitch = (next: Engine) => {
-    if (next === engine) return;
-    generateGame.reset();
-    setGuestPreview(null);
-    setEngine(next);
   };
 
   // When a guest signs in after seeing the preview, save + navigate
@@ -200,10 +153,6 @@ export default function Home() {
     );
   };
 
-  const genreList = engine === "2d" ? GAME_GENRES_2D : GAME_GENRES_3D;
-  const setSelectedGenre =
-    engine === "2d" ? setSelected2DGenre : setSelected3DGenre;
-
   return (
     <div className="flex-1 flex flex-col">
       {/* ── Hero Section ──────────────────────────────────────────────────── */}
@@ -221,100 +170,29 @@ export default function Home() {
               today?
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Describe your idea — our AI builds a fully playable browser game in
-              seconds.
+              Describe any game you can imagine — our AI figures out the rest and
+              builds it in seconds.
             </p>
           </div>
-
-          {/* ── Engine toggle ──────────────────────────────────────────────── */}
-          <div className="flex justify-center">
-            <div
-              className="inline-flex rounded-xl border border-border bg-card p-1 gap-1"
-              role="group"
-              aria-label="Game engine"
-              data-testid="engine-toggle"
-            >
-              {ENGINE_TABS.map((tab) => {
-                const Icon = tab.icon;
-                const active = engine === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleEngineSwitch(tab.id)}
-                    disabled={isBusy}
-                    data-testid={`engine-tab-${tab.id}`}
-                    title={tab.description}
-                    className={cn(
-                      "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-[0_0_14px_rgba(34,197,94,0.35)]"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5",
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 3D mode sub-label */}
-          {engine === "3d" && (
-            <p className="text-xs text-primary/70 font-mono tracking-wide -mt-2">
-              Three.js engine — uses a hardened template; genre shapes the
-              gameplay, not the boilerplate
-            </p>
-          )}
 
           {/* ── Creator card ───────────────────────────────────────────────── */}
           <div className="bg-card border border-border p-4 rounded-2xl shadow-2xl shadow-black/50">
             <textarea
               data-testid="prompt-input"
-              className="w-full h-28 bg-transparent text-foreground placeholder:text-muted-foreground/50 resize-none border-none focus:ring-0 p-2 text-lg"
-              placeholder={
-                engine === "2d"
-                  ? "A side-scrolling platformer where a robot escapes a collapsing neon factory..."
-                  : engine === "3d" && selected3DGenre === "FP Horror"
-                  ? "A horror maze where the walls shift and a shadowy monster hunts you by sound..."
-                  : engine === "3d" && selected3DGenre === "Space Shooter"
-                  ? "A space battle where you pilot a fighter through an asteroid field..."
-                  : "Describe your game idea..."
-              }
+              className="w-full h-40 bg-transparent text-foreground placeholder:text-muted-foreground/50 resize-none border-none focus:ring-0 p-2 text-lg"
+              placeholder="Describe any game you can imagine..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               disabled={isBusy}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate();
+              }}
             />
 
-            {/* Genre tags */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t border-border mt-2">
-              <div className="flex flex-wrap gap-2">
-                {genreList.map((genre) => {
-                  const active = selectedGenre === genre;
-                  return (
-                    <button
-                      key={genre}
-                      onClick={() => setSelectedGenre(genre)}
-                      disabled={isBusy}
-                      data-testid={`genre-tag-${genre}`}
-                      title={
-                        engine === "3d"
-                          ? GENRE_DESCRIPTIONS_3D[genre]
-                          : undefined
-                      }
-                      className={cn(
-                        "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
-                        active
-                          ? "bg-primary/20 text-primary border-primary shadow-[0_0_10px_rgba(34,197,94,0.2)]"
-                          : "bg-white/5 text-muted-foreground border-transparent hover:bg-white/10 hover:text-foreground",
-                      )}
-                    >
-                      {genre}
-                    </button>
-                  );
-                })}
-              </div>
-
+            <div className="flex items-center justify-between gap-4 pt-4 border-t border-border mt-2">
+              <p className="text-xs text-muted-foreground/60 hidden sm:block">
+                AI automatically picks 2D or 3D and the genre based on your description
+              </p>
               <Button
                 size="lg"
                 onClick={handleGenerate}
@@ -325,7 +203,7 @@ export default function Home() {
                 {generateGame.isPending ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    {engine === "3d" ? "Forging 3D…" : "Forging…"}
+                    Forging…
                   </>
                 ) : saveGame.isPending ? (
                   <>
@@ -335,7 +213,7 @@ export default function Home() {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 mr-2" />
-                    Create {engine === "3d" ? "3D " : ""}Game
+                    Create Game
                   </>
                 )}
               </Button>
@@ -384,9 +262,7 @@ export default function Home() {
                         : "bg-sky-500/20 text-sky-400 border-sky-500/30",
                     )}
                   >
-                    {guestPreview.engine === "3d"
-                      ? "Three.js 3D"
-                      : "Phaser.js 2D"}
+                    {guestPreview.engine === "3d" ? "Three.js 3D" : "Phaser.js 2D"}
                   </span>
                   {guestPreview.qualityScore != null && (
                     <span
@@ -409,7 +285,6 @@ export default function Home() {
               {/* Sign-in CTA */}
               <div className="flex items-center gap-3">
                 {isSignedIn ? (
-                  // User just signed in — offer to save
                   <Button
                     onClick={handleGuestSave}
                     disabled={saveGame.isPending}
@@ -421,7 +296,7 @@ export default function Home() {
                     ) : (
                       <Code className="w-4 h-4 mr-2" />
                     )}
-                    Save & Open Editor
+                    Save &amp; Open Editor
                   </Button>
                 ) : (
                   <Link href="/sign-in">

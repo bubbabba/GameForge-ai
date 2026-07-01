@@ -46,6 +46,46 @@ function requireAuth(req: any, res: any, next: any) {
   next();
 }
 
+// ── Prompt classifier ─────────────────────────────────────────────────────
+// Reads the user description and decides engine (2d/3d) + genre automatically.
+
+function classifyPrompt(prompt: string): { engine: "2d" | "3d"; genre: string } {
+  const p = prompt.toLowerCase();
+
+  // Signals that almost certainly mean 3D
+  const wants3D =
+    /\b(3d|first[\s-]person|fps|first person shooter|space\s+shooter|asteroid|spaceship|galaxy|alien\s+ship|fly\s+through|backrooms|horror\s+maze|dark\s+corridor|haunted\s+house|zombie\s+chase|third[\s-]person)\b/.test(p);
+
+  // Signals that almost certainly mean 2D
+  const wants2D =
+    /\b(2d|platformer|side[\s-]scroll|side scroll|pixel\s+art|pixel art|top[\s-]down|overhead|retro|arcade|sprite|tile\s+map|tilemap)\b/.test(p);
+
+  // Rule: explicit 2D wins over explicit 3D; both absent → 2D default
+  const engine: "2d" | "3d" = wants3D && !wants2D ? "3d" : "2d";
+
+  // Genre for display and (3D) shell selection
+  let genre = "Platformer";
+  if (/\b(horror|backrooms|monster|scary|haunted|zombie|dark|creepy|fear|ghost|sinister)\b/.test(p)) {
+    genre = engine === "3d" ? "FP Horror" : "Horror";
+  } else if (/\b(space|asteroid|spaceship|galaxy|alien|stars?|orbit|planet)\b/.test(p)) {
+    genre = engine === "3d" ? "Space Shooter" : "Shooter";
+  } else if (/\b(race|racing|car|drive|vehicle|track|speed|lap)\b/.test(p)) {
+    genre = "Racing";
+  } else if (/\b(puzzle|block|push|logic|match|tetris|sokoban|connect)\b/.test(p)) {
+    genre = "Puzzle";
+  } else if (/\b(shoot|shooter|bullet|enemies?|wave|combat|gun|weapon|blast)\b/.test(p)) {
+    genre = engine === "3d" ? "Space Shooter" : "Shooter";
+  } else if (/\b(rpg|quest|dungeon|hero|sword|magic|spell|level\s+up)\b/.test(p)) {
+    genre = "RPG";
+  } else if (/\b(adventure|explore|exploration|open\s+world)\b/.test(p)) {
+    genre = "Adventure";
+  } else if (/\b(jump|platform|collect|coin|run)\b/.test(p)) {
+    genre = "Platformer";
+  }
+
+  return { engine, genre };
+}
+
 // ── AI Generation ──────────────────────────────────────────────────────────
 
 router.post("/games/generate", async (req, res): Promise<void> => {
@@ -65,22 +105,25 @@ router.post("/games/generate", async (req, res): Promise<void> => {
     return;
   }
 
-  const { prompt, genre, engine } = parsed.data;
-  const is3D = engine === "3d";
+  const { prompt } = parsed.data;
 
   if (prompt.length > MAX_PROMPT_LENGTH) {
     res.status(400).json({ error: `Prompt too long. Max ${MAX_PROMPT_LENGTH} characters.` });
     return;
   }
 
-  req.log.info({ genre, engine: engine ?? "2d", promptLength: prompt.length }, "Generating game with Claude");
+  // Auto-classify: ignore any client-sent genre/engine; Claude decides.
+  const { engine, genre } = classifyPrompt(prompt);
+  const is3D = engine === "3d";
+
+  req.log.info({ genre, engine, promptLength: prompt.length }, "Generating game with Claude (auto-classified)");
 
   try {
     // ── 3D path: inject Claude logic into a hardcoded Three.js shell ──────
     if (is3D) {
       const result = await generate3DGame(apiKey, prompt, genre, req.log);
       req.log.info({ title: result.title }, "3D game generated successfully");
-      res.json(result);
+      res.json({ ...result, engine, genre });
       return;
     }
 
@@ -89,6 +132,8 @@ router.post("/games/generate", async (req, res): Promise<void> => {
     res.json({
       gameCode: result.gameCode,
       title: result.title,
+      engine,
+      genre,
       qualityScore: result.qualityScore,
       gamePlan: result.gamePlan,
     });

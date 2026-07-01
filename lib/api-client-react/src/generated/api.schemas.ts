@@ -40,13 +40,17 @@ export const GameRequestEngine = {
 export interface GameRequest {
   /** @minLength 1 */
   prompt: string;
-  genre: GameRequestGenre;
+  genre?: GameRequestGenre;
   engine?: GameRequestEngine;
 }
 
 export interface GameGenerated {
   gameCode: string;
   title: string;
+  /** Engine used: 2d (Phaser) or 3d (Three.js) */
+  engine?: '2d' | '3d';
+  /** Genre auto-detected from the prompt */
+  genre?: string;
   /**
      * AI-assessed quality score (0–100) for the generated game
      * @minimum 0

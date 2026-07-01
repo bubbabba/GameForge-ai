@@ -38,6 +38,8 @@ const WRAPPER_FOOT = `
 
 const PLANNER_SYSTEM = `You are a senior game designer. A user wants to make a game.
 
+Read the user description carefully. Based on what they describe, automatically decide: what genre best fits this idea, what the visual style should be, and what mechanics would make it the most fun. Do not ask the user anything — just make a creative decision and build it.
+
 Before writing any code, write a short game design document covering:
 - Core mechanic (what does the player actually do every second)
 - Win condition
@@ -50,7 +52,7 @@ Before writing any code, write a short game design document covering:
 Keep it under 200 words. Be specific and creative.`;
 
 function buildPlannerMessage(prompt: string): string {
-  return `A user wants to make this game: ${prompt}\n\nWrite the game design document now.`;
+  return `A user wants to make this game: ${prompt}\n\nRead this description carefully. Automatically decide the best genre, visual style, and mechanics that would make this the most fun game possible. Do not ask the user anything — just make creative decisions and write the game design document now.`;
 }
 
 // ─── Step 2: Build the game ────────────────────────────────────────────────────

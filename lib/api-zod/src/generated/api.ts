@@ -24,8 +24,8 @@ export const generateGameBodyEngineDefault = `2d`;
 
 export const GenerateGameBody = zod.object({
   "prompt": zod.string().min(1),
-  "genre": zod.enum(['Platformer', 'Horror', 'Shooter', 'Puzzle', 'Racing', 'RPG', 'Adventure', 'Fantasy', 'FP Horror', 'Space Shooter']),
-  "engine": zod.enum(['2d', '3d']).default(generateGameBodyEngineDefault)
+  "genre": zod.enum(['Platformer', 'Horror', 'Shooter', 'Puzzle', 'Racing', 'RPG', 'Adventure', 'Fantasy', 'FP Horror', 'Space Shooter']).optional(),
+  "engine": zod.enum(['2d', '3d']).optional()
 })
 
 export const generateGameResponseQualityScoreMin = 0;
@@ -36,6 +36,8 @@ export const generateGameResponseQualityScoreMax = 100;
 export const GenerateGameResponse = zod.object({
   "gameCode": zod.string(),
   "title": zod.string(),
+  "engine": zod.enum(['2d', '3d']).optional().describe('Engine used: 2d (Phaser) or 3d (Three.js)'),
+  "genre": zod.string().optional().describe('Genre auto-detected from the prompt'),
   "qualityScore": zod.number().min(generateGameResponseQualityScoreMin).max(generateGameResponseQualityScoreMax).optional().describe('AI-assessed quality score (0–100) for the generated game'),
   "gamePlan": zod.string().optional().describe('Game design document Claude wrote before building the game')
 })
