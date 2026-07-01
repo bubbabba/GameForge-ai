@@ -90,7 +90,7 @@ function buildBuilderMessage(gdd: string, spriteManifest?: SpriteManifest): stri
     // Background create line (only if background sprite generated)
     const bgCreate = m.background
       ? `  this.add.image(400, 300, 'bg').setDisplaySize(800, 600).setDepth(-10);`
-      : `  // No background sprite — use this.add.rectangle(400,300,800,600,0x1a1a2e).setDepth(-10); for a dark bg`;
+      : `  // No background sprite available — add a dark solid background: this.cameras.main.setBackgroundColor('#1a1a2e');`;
 
     // Build per-entity usage instructions based on what actually succeeded
     const usageLines: string[] = [];
@@ -113,19 +113,22 @@ function buildBuilderMessage(gdd: string, spriteManifest?: SpriteManifest): stri
     }
 
     spriteSection = `
-SPRITES — Pre-generated pixel art sprites are provided. Use ONLY the keys listed below (do NOT use a key that isn't listed — use graphics primitives for missing elements).
+SPRITES REQUIRED — Pixel art sprites have been pre-generated for this game. You MUST use them. Using this.add.graphics() or this.add.rectangle() for any entity that has a sprite key below is a CRITICAL FAILURE.
 
-In BootScene preload(), load every sprite (copy these lines exactly):
+Step 1 — In BootScene preload(), copy these load lines EXACTLY (do not change the keys or URLs):
 ${loadLines.join("\n")}
 
-In GameScene create(), add background AS THE FIRST LINE before any physics objects:
+Step 2 — In GameScene create(), add the background as the VERY FIRST LINE before any other object:
 ${bgCreate}
 
-Per-entity usage (only use sprite keys that appear in the load list above):
+Step 3 — Use the sprite keys for every game entity listed below. NEVER use graphics() for these — only images:
 ${usageLines.join("\n")}
-- You may still use this.add.graphics() for UI elements (health bars, score backgrounds) and any entity whose sprite key is not in the load list
-- setOrigin(0.5) is the default for images — no need to set it explicitly
-- For groups: this.physics.add.group() then group.create(x, y, 'enemy').setDisplaySize(48, 48)
+
+Rules:
+- this.add.graphics() is ONLY allowed for UI overlays (health bars, score boxes) — NEVER for game entities or background
+- Always call .setDisplaySize(width, height) on every sprite image to control its size
+- For enemy groups: enemies.create(x, y, 'enemy').setDisplaySize(48, 48)
+- setOrigin(0.5) is the default — no need to set it
 `;
   } else {
     spriteSection = `  - Use only Phaser graphics primitives (this.add.graphics), no external images\n`;

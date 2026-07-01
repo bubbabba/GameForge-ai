@@ -44,6 +44,16 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+/**
+ * Returns the current bearer token from the registered getter, or null if
+ * no getter is set.  Call this from non-hook contexts (e.g. streamPost, raw
+ * fetch calls) to add Authorization headers the same way customFetch does.
+ */
+export async function getAuthToken(): Promise<string | null> {
+  if (!_authTokenGetter) return null;
+  return _authTokenGetter();
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }

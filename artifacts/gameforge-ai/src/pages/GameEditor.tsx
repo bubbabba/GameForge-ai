@@ -13,6 +13,7 @@ import {
   getGetGameQueryKey,
 } from "@workspace/api-client-react";
 import { streamPost } from "@/lib/streamPost";
+import { apiFetch } from "@/lib/apiFetch";
 import { Button } from "@/components/ui/button";
 import {
   ResizablePanelGroup,
@@ -631,7 +632,7 @@ export default function GameEditor() {
 
   const generateCoverMutation = useMutation({
     mutationFn: () =>
-      fetch(`/api/games/${id}/generate-cover`, { method: "POST" }).then(async (r) => {
+      apiFetch(`/api/games/${id}/generate-cover`, { method: "POST" }).then(async (r) => {
         if (!r.ok) {
           const e = await r.json().catch(() => ({}));
           throw new Error((e as any).error || "Cover generation failed");
@@ -653,9 +654,8 @@ export default function GameEditor() {
 
   const generateSpriteMutation = useMutation({
     mutationFn: (description: string) =>
-      fetch(`/api/games/${id}/generate-sprite`, {
+      apiFetch(`/api/games/${id}/generate-sprite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description }),
       }).then(async (r) => {
         if (!r.ok) {
@@ -672,9 +672,8 @@ export default function GameEditor() {
           const spritesJson = JSON.stringify(
             updated.map((s, i) => ({ name: `sprite_${i}`, url: s.url, description: s.description })),
           );
-          fetch(`/api/games/${id}`, {
+          apiFetch(`/api/games/${id}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ spritesJson }),
           }).catch(() => {/* non-critical */});
         }

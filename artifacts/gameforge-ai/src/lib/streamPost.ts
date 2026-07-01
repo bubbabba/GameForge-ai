@@ -1,3 +1,5 @@
+import { getAuthToken } from "@workspace/api-client-react";
+
 /**
  * POST to an SSE endpoint, optionally reporting status messages, and return the final result payload.
  *
@@ -18,11 +20,15 @@ export async function streamPost<T>(
   onStatus?: (msg: string) => void,
   signal?: AbortSignal,
 ): Promise<T> {
+  // Attach the Clerk bearer token — same mechanism used by React Query hooks
+  const token = await getAuthToken().catch(() => null);
+  const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader },
       body: JSON.stringify(body),
       signal,
     });

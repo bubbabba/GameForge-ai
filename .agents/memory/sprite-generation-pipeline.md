@@ -7,6 +7,15 @@ description: How AI sprites are auto-generated during game creation and stored/l
 
 When a 2D game is generated, the server automatically creates pixel-art sprites before building the Phaser code. Every image (sprites, background, cover, editor-regenerated sprites) is grounded in the actual GDD Claude wrote.
 
+## Auth for fetch calls — critical pattern
+
+All authenticated API calls MUST use the auth-aware wrappers:
+- **React Query hooks** (`useSaveGame`, `useUpdateGame`, etc.) — use `customFetch` automatically, Bearer token included
+- **`streamPost()`** — imports `getAuthToken` from `@workspace/api-client-react`, attaches Bearer header before the `fetch` call
+- **Direct `fetch()` in pages/components** — import `apiFetch` from `@/lib/apiFetch` instead of raw `fetch`. apiFetch calls `getAuthToken()` and adds the Authorization header.
+
+**Never use raw `fetch()` for authenticated routes.** The Clerk session token is only added by `customFetch` / `apiFetch` / `streamPost`. Raw fetch will always get 401 on protected routes.
+
 ## Server pipeline (generate2d.ts + generateGameSprites.ts)
 
 1. **Planning** — Claude writes a GDD (max 1024 tokens, 1 retry on transient failure)
@@ -15,9 +24,16 @@ When a 2D game is generated, the server automatically creates pixel-art sprites 
    - Background description (exact setting from GDD)
    - **GameContext**: `{setting, playerDescription, enemyDescriptions[], artStyle, colorPalette, mood}` — all extracted verbatim from GDD
    - Validated with `isValidContext()` — retries once if invalid
-3. **Sprite generation** — All images generated in parallel via `Promise.allSettled` using Replicate `black-forest-labs/flux-schnell`. Each prompt uses GameContext fields.
+3. **Sprite generation** — All images generated in parallel via `Promise.allSettled` using Replicate. Each prompt uses GameContext fields.
 4. **Style consistency check** — Second Claude call lists generated sprites and asks which don't fit the GDD. Flagged sprites are re-generated once.
 5. **Builder** — Claude builds Phaser code with `this.load.image` calls injected for only the sprites that succeeded.
+
+## Builder prompt for sprites — key phrase to enforce actual usage
+
+The sprite section of `buildBuilderMessage()` MUST begin with:
+> "SPRITES REQUIRED — ... Using this.add.graphics() or this.add.rectangle() for any entity that has a sprite key is a CRITICAL FAILURE."
+
+Without this strong language Claude tends to fall back to graphics primitives despite being given sprite keys.
 
 ## Prompt templates (per spec)
 
@@ -59,5 +75,3 @@ ALTER TABLE games ADD COLUMN IF NOT EXISTS sprites_json TEXT;
 ALTER TABLE games ADD COLUMN IF NOT EXISTS game_plan TEXT;
 ALTER TABLE games ADD COLUMN IF NOT EXISTS game_context TEXT;
 ```
-
-**Why psql**: drizzle-kit push isn't wired to a CLI in this project; psql is the reliable path.
