@@ -30,7 +30,7 @@ const GENRE_HINTS: Record<string, string> = {
   Fantasy: "fantasy world game with magic, creatures, and epic quests",
 };
 
-const MAX_PROMPT_LENGTH = 1000;
+const MAX_PROMPT_LENGTH = 4000;
 
 function generateSlug(title: string): string {
   const base = title
@@ -65,7 +65,10 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
   const parsed = GenerateGameBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    const firstIssue = parsed.error.issues[0];
+    const field = firstIssue?.path?.[0] ?? "request";
+    const msg = firstIssue?.message ?? "Invalid request";
+    res.status(400).json({ error: `${field}: ${msg}` });
     return;
   }
 
