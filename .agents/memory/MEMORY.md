@@ -2,3 +2,5 @@
 - [Prompt length fix](prompt-length-fix.md) — MAX_PROMPT_LENGTH was 1000 chars (rejecting detailed prompts); raised to 4000. Zod errors now return human-readable field:message instead of raw JSON.
 - [Phaser template edit hazard](phaser-template-edit-hazard.md) — Edit tool mangles '$' inside phaserTemplates.ts template literals; always use Python for edits touching that char.
 - [Game generation architecture](game-generation-architecture.md) — 2D: two-step (plan GDD then build full JS), no shells, claude-sonnet-4-6, temp 0.9; gamePlan in API then sessionStorage then editor chat.
+- [Chat route DB-authoritative code](chat-route-db-code.md) — Chat route fetches currentCode from DB (not client), validates HTML, retries once, persists codeVersion; currentCode is optional/deprecated in API contract.
+- [Lib rebuild order](lib-rebuild-order.md) — After any schema change: rebuild lib/db → api-zod → api-client-react (tsc -p tsconfig.json each). Then typecheck api-server and gameforge-ai. Never skip db rebuild when gamesTable changes.

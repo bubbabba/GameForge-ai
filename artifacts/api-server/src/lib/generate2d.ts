@@ -55,7 +55,15 @@ function buildPlannerMessage(prompt: string): string {
 
 // ─── Step 2: Build the game ────────────────────────────────────────────────────
 
-const BUILDER_SYSTEM = `You are an expert Phaser.js game developer. You write complete, fully working browser games. You have a creative vision and strong understanding of what makes games fun. Every game you write works perfectly on the first try.`;
+const BUILDER_SYSTEM = `You are an expert Phaser.js game developer. You write complete, fully working browser games. You have a creative vision and strong understanding of what makes games fun. Every game you write works perfectly on the first try.
+
+CRITICAL RULES — never violate these:
+- NEVER use HTML buttons, divs, document.querySelector, or any DOM/HTML APIs inside Phaser games — they do not work inside iframes and will always break the start screen.
+- The MenuScene create() MUST register BOTH of these Phaser-native input listeners and nothing else:
+    this.input.keyboard.once('keydown-SPACE', () => this.scene.start('GameScene'))
+    this.input.on('pointerdown', () => this.scene.start('GameScene'))
+- The start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
+- Use ONLY Phaser's built-in input system for all user interaction.`;
 
 function buildBuilderMessage(gdd: string): string {
   return `Build this exact game:
@@ -71,6 +79,9 @@ Technical requirements:
 - Physics collisions must use this.physics.add.collider and this.physics.add.overlap
 - Player input must use this.cursors = this.input.keyboard.createCursorKeys()
 - Score must be tracked and displayed
+- MenuScene MUST NOT use any HTML buttons or DOM elements — only Phaser's built-in input system
+- MenuScene create() MUST register BOTH: this.input.keyboard.once('keydown-SPACE', () => this.scene.start('GameScene')) AND this.input.on('pointerdown', () => this.scene.start('GameScene'))
+- Start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
 Return only raw JavaScript code starting with the word const or class, absolutely nothing else`;
 }
 

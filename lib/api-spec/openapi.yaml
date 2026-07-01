@@ -460,6 +460,13 @@ components:
           type: string
         gameCode:
           type: string
+        currentCode:
+          type: string
+          nullable: true
+          description: Latest live version of the code, updated after every successful AI chat edit
+        codeVersion:
+          type: integer
+          description: Increments each time an AI chat edit is successfully applied
         status:
           type: string
           enum: [draft, published]
@@ -530,7 +537,7 @@ components:
 
     GameChatRequest:
       type: object
-      required: [message, currentCode]
+      required: [message]
       properties:
         message:
           type: string
@@ -538,6 +545,7 @@ components:
         currentCode:
           type: string
           minLength: 1
+          description: Deprecated — server now uses DB-tracked currentCode as the authoritative source. Field accepted for backwards compatibility but ignored.
 
     GameChatResponse:
       type: object
@@ -548,6 +556,9 @@ components:
         changeSummary:
           type: string
           description: One-sentence description of exactly what Claude changed
+        codeVersion:
+          type: integer
+          description: New version number after this edit was applied
 
     LikeResult:
       type: object

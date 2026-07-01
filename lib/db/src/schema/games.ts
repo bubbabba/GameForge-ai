@@ -13,6 +13,10 @@ export const gamesTable = pgTable("games", {
   likesCount: integer("likes_count").notNull().default(0),
   authorId: text("author_id").notNull(),   // Clerk user ID
   authorName: text("author_name").notNull(),
+  /** Latest live version of the code — updated after every successful AI chat edit */
+  currentCode: text("current_code"),
+  /** Increments each time an AI chat edit is successfully applied */
+  codeVersion: integer("code_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

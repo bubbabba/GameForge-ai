@@ -71,6 +71,10 @@ export interface Game {
   genre: string;
   prompt: string;
   gameCode: string;
+  /** Latest live version of the code, updated after every successful AI chat edit */
+  currentCode?: string | null;
+  /** Increments each time an AI chat edit is successfully applied */
+  codeVersion?: number;
   status: GameStatus;
   slug: string;
   likesCount: number;
@@ -116,13 +120,18 @@ export interface GamePatch {
 export interface GameChatRequest {
   /** @minLength 1 */
   message: string;
-  /** @minLength 1 */
-  currentCode: string;
+  /**
+   * @minLength 1
+   * @deprecated Server uses DB-tracked currentCode — field accepted for backwards compatibility but ignored
+   */
+  currentCode?: string;
 }
 
 export interface GameChatResponse {
   updatedCode: string;
   changeSummary?: string;
+  /** New version number after this edit was applied */
+  codeVersion?: number;
 }
 
 export interface LikeResult {

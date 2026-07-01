@@ -176,6 +176,7 @@ interface ChatPanelProps {
   canRedo: boolean;
   canReset: boolean;
   isFullscreen: boolean;
+  codeVersion: number;
 }
 
 function ChatPanel({
@@ -191,6 +192,7 @@ function ChatPanel({
   canRedo,
   canReset,
   isFullscreen,
+  codeVersion,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -274,8 +276,13 @@ function ChatPanel({
         <span className="text-[11px] font-mono text-white/60 font-semibold">
           AI Game Assistant
         </span>
-        <span className="ml-auto text-[10px] text-emerald-400/60 font-mono">
-          claude-sonnet
+        <span className="ml-auto flex items-center gap-2 text-[10px] font-mono">
+          {codeVersion > 0 && (
+            <span className="text-white/25" title={`${codeVersion} AI edit${codeVersion === 1 ? "" : "s"} applied`}>
+              v{codeVersion}
+            </span>
+          )}
+          <span className="text-emerald-400/60">claude-sonnet</span>
         </span>
       </div>
 
@@ -489,6 +496,7 @@ export default function GameEditor() {
   // ── Editor state ──────────────────────────────────────────────────────────
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
+  const [codeVersion, setCodeVersion] = useState(0);
   const [previewCode, setPreviewCode] = useState("");
   const [iframeKey, setIframeKey] = useState(0);
   const [savedCode, setSavedCode] = useState("");
@@ -520,14 +528,17 @@ export default function GameEditor() {
   useEffect(() => {
     if (game && initializedForId.current !== game.id) {
       initializedForId.current = game.id;
-      setCode(game.gameCode);
+      // Use currentCode (AI-tracked live version) if available, otherwise fall back to gameCode
+      const liveCode = game.currentCode ?? game.gameCode;
+      setCode(liveCode);
       setTitle(game.title);
-      setSavedCode(game.gameCode);
+      setSavedCode(liveCode);
       setSavedTitle(game.title);
-      setPreviewCode(game.gameCode);
+      setPreviewCode(liveCode);
       setIframeKey((k) => k + 1);
+      setCodeVersion(game.codeVersion ?? 0);
       // Always anchor originalCode to this specific game's initial code
-      originalCode.current = game.gameCode;
+      originalCode.current = liveCode;
       // Clear history stacks — they belong to the previous game
       undoStack.current = [];
       redoStack.current = [];
@@ -742,6 +753,9 @@ export default function GameEditor() {
             setCode(updated);
             setPreviewCode(updated);
             setIframeKey((k) => k + 1);
+
+            // Track the new version number returned by the server
+            if (data.codeVersion != null) setCodeVersion(data.codeVersion);
 
             // Auto-save the new version
             doSave(updated, titleRef.current);
@@ -979,6 +993,7 @@ export default function GameEditor() {
                   canRedo={canRedo}
                   canReset={canReset}
                   isFullscreen={isFullscreen}
+                  codeVersion={codeVersion}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>

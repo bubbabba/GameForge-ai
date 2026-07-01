@@ -13,6 +13,8 @@ export interface Game {
   genre: string;
   prompt: string;
   gameCode: string;
+  currentCode?: string | null;
+  codeVersion?: number;
   status: GameStatus;
   slug: string;
   likesCount: number;

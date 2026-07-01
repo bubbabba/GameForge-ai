@@ -1,0 +1,65 @@
+Problem 1 — Start button never works
+This is a persistent bug that the Agent keeps patching wrong. Type this:
+
+"The start button in generated games is completely broken and has been for every single game. Stop trying to patch it. Instead do this:
+In every single game template and generation prompt, hardcode the start mechanic like this — do NOT use a button element, do NOT use DOM elements, ONLY use Phaser's built in input system:
+
+The MenuScene must listen for this.input.keyboard.once('keydown-SPACE', startGame)
+AND this.input.on('pointerdown', startGame) for mouse/touch
+The start screen text must say CLICK ANYWHERE OR PRESS SPACE TO START
+Never use HTML buttons inside Phaser games, they don't work inside iframes
+Add this fix to every single existing template and to the Claude generation prompt so every future game also follows this rule
+Test this fix right now by generating a test game and confirming the start screen works before moving on"
+
+
+Problem 2 — AI editing not working properly
+Type this separately after the first fix:
+
+"The game editing chat is not applying changes correctly. Here is the root cause and fix:
+Root cause: Claude is receiving the original game code not the current live code when the user makes edits, so changes conflict with each other and break things
+Fix:
+
+Store the current game code in a database field called current_code that updates every single time a change is successfully applied
+Every edit message to Claude must pull from current_code not the original generated code
+After Claude returns new code, before running it:
+
+Validate it has a Phaser.Scene
+Validate it has create() and update() functions
+Validate it is longer than 80 lines
+If validation fails, send Claude a second message saying 'That code was invalid. Here is what was wrong: [ERROR]. Please fix it and return the complete working code'
+
+
+Only replace current_code in the database after validation passes
+If it fails twice in a row, revert to the last known working code automatically and tell the user
+Add a visible indicator showing 'Current version: [number]' so the user can see changes are being tracked"
+
+
+Problem 3 — AI generated images for covers and sprites
+Type this separately:
+
+"Add AI image generation for game covers and sprites using the Stability AI API or Replicate API. Here is exactly what to add:
+Game cover generation:
+
+After a game is generated, automatically generate a cover image using the game description as the prompt
+The image should be 16:9 ratio, dark and dramatic looking, styled like a professional game cover
+Show the cover on the game card in the gallery and at the top of the editor
+Users can regenerate the cover by clicking a refresh icon on it
+Add a text overlay with the game title on the cover automatically
+
+Sprite generation:
+
+Add a Sprites panel in the editor sidebar
+Users can type what sprite they want like 'pixel art space ship' or 'cartoon zombie enemy'
+Generate the sprite as a transparent PNG
+The sprite appears in a sprites library panel
+Users can drag sprites from the library into the game
+Claude should automatically update the game code to use the sprite image instead of a colored shape when a sprite is added
+Style all sprites consistently: pixel art style, transparent background, 64x64 pixels
+
+For the image generation API use Replicate:
+
+Sign up at https://replicate.com
+Get an API key and add it to Secrets as REPLICATE_API_KEY
+Use the model stability-ai/sdxl for game covers
+Use the model pixel-art-xl for sprites
+Add the API key to the Secrets tab the same way you added the Claude key"

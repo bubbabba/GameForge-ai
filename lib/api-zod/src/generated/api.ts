@@ -127,6 +127,8 @@ export const GetGameResponse = zod.object({
   "genre": zod.string(),
   "prompt": zod.string(),
   "gameCode": zod.string(),
+  "currentCode": zod.string().nullable().optional(),
+  "codeVersion": zod.number().optional(),
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
@@ -155,6 +157,8 @@ export const UpdateGameResponse = zod.object({
   "genre": zod.string(),
   "prompt": zod.string(),
   "gameCode": zod.string(),
+  "currentCode": zod.string().nullable().optional(),
+  "codeVersion": zod.number().optional(),
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
@@ -211,12 +215,14 @@ export const ChatEditGameParams = zod.object({
 
 export const ChatEditGameBody = zod.object({
   "message": zod.string().min(1),
-  "currentCode": zod.string().min(1)
+  /** @deprecated Server uses DB-tracked currentCode — field accepted for backwards compatibility but ignored */
+  "currentCode": zod.string().min(1).optional()
 })
 
 export const ChatEditGameResponse = zod.object({
   "updatedCode": zod.string(),
-  "changeSummary": zod.string().optional()
+  "changeSummary": zod.string().optional(),
+  "codeVersion": zod.number().optional()
 })
 
 

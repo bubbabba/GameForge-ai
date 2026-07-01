@@ -284,7 +284,10 @@ router.patch("/games/:id", requireAuth, async (req: any, res): Promise<void> => 
 
   const updates: Partial<typeof existing> = {};
   if (body.data.title !== undefined) updates.title = body.data.title;
-  if (body.data.gameCode !== undefined) updates.gameCode = body.data.gameCode;
+  if (body.data.gameCode !== undefined) {
+    updates.gameCode = body.data.gameCode;
+    updates.currentCode = body.data.gameCode; // keep live version in sync with manual saves
+  }
 
   const [updated] = await db
     .update(gamesTable)
@@ -396,7 +399,39 @@ router.post("/games/:id/like", requireAuth, async (req: any, res): Promise<void>
   res.json({ liked, likesCount: newCount });
 });
 
-// ── AI Chat Editor ──────────────────────────────────────────────────────────
+// ── Chat helpers ──────────────────────────────────────────────────────────────
+
+/** Extract the HTML body and optional CHANGE: summary from Claude's raw response. */
+function extractHtmlAndSummary(rawFull: string): { html: string; changeSummary: string | undefined } {
+  const htmlCloseLower = rawFull.toLowerCase().lastIndexOf("</html>");
+  const htmlEnd = htmlCloseLower !== -1 ? htmlCloseLower + 7 : -1;
+
+  // CHANGE: summary must only come from the tail after </html>
+  let changeSummary: string | undefined;
+  if (htmlEnd !== -1) {
+    const tail = rawFull.slice(htmlEnd).trim();
+    const m = tail.match(/^CHANGE:\s*(.+)$/m);
+    if (m?.[1]) changeSummary = m[1].trim();
+  }
+
+  const html = htmlEnd !== -1 ? rawFull.slice(0, htmlEnd) : rawFull.trim();
+  return { html, changeSummary };
+}
+
+/** Validate that Claude's returned HTML is a complete, working game. */
+function validateChatHtml(html: string, isPhaser: boolean): string | null {
+  if (!html.trimStart().startsWith("<")) return "Response is not valid HTML";
+  const nonEmpty = html.split("\n").filter((l) => l.trim().length > 0).length;
+  if (nonEmpty < 80) return `Code too short: ${nonEmpty} non-empty lines (need 80+)`;
+  if (isPhaser) {
+    if (!html.includes("Phaser.Scene")) return "Missing Phaser.Scene class";
+    if (!/create\s*\(/.test(html)) return "Missing create() function";
+    if (!/update\s*\(/.test(html)) return "Missing update() function";
+  }
+  return null;
+}
+
+// ── AI Chat Editor ───────────────────────────────────────────────────────────
 
 const CHAT_SYSTEM_PROMPT = [
   "You are an expert game developer who built this specific game. You have complete understanding of every line of code. When the user asks for a change:",
@@ -413,8 +448,8 @@ const CHAT_SYSTEM_PROMPT = [
   "3. After the closing </html> tag, on a new line write exactly: CHANGE: [one sentence describing precisely what you changed, e.g. 'Increased player speed from 200 to 350 and added a double jump on pressing W']",
 ].join("\n");
 
-const MAX_CHAT_MESSAGE_CHARS = 2_000; // reasonable limit for a natural-language edit request
-const MAX_CHAT_CODE_CHARS = 80_000; // ~20k tokens of code context
+const MAX_CHAT_MESSAGE_CHARS = 2_000;
+const MAX_CHAT_CODE_CHARS = 80_000;
 
 router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
   const apiKey = process.env.CLAUDE_API_KEY;
@@ -436,16 +471,22 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const { message, currentCode } = body.data;
+  const { message } = body.data;
 
   if (message.length > MAX_CHAT_MESSAGE_CHARS) {
     res.status(400).json({ error: `Message too long. Max ${MAX_CHAT_MESSAGE_CHARS} characters.` });
     return;
   }
 
-  // Verify the game belongs to this user
+  // Fetch full game record — currentCode is the DB-tracked authoritative live version
   const [game] = await db
-    .select({ id: gamesTable.id, authorId: gamesTable.authorId })
+    .select({
+      id: gamesTable.id,
+      authorId: gamesTable.authorId,
+      gameCode: gamesTable.gameCode,
+      currentCode: gamesTable.currentCode,
+      codeVersion: gamesTable.codeVersion,
+    })
     .from(gamesTable)
     .where(eq(gamesTable.id, params.data.id));
 
@@ -458,59 +499,87 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Truncate code if absurdly large (shouldn't happen in practice)
-  const codeContext = currentCode.length > MAX_CHAT_CODE_CHARS
-    ? currentCode.slice(0, MAX_CHAT_CODE_CHARS) + "\n<!-- [truncated] -->"
-    : currentCode;
+  // Always use DB's live code — every edit builds on the correct latest version,
+  // not the original generated code or a stale client snapshot.
+  const liveCode = game.currentCode ?? game.gameCode;
+  const isPhaser = liveCode.includes("Phaser");
 
-  req.log.info({ gameId: params.data.id, messageLength: message.length }, "AI chat edit requested");
+  const codeContext = liveCode.length > MAX_CHAT_CODE_CHARS
+    ? liveCode.slice(0, MAX_CHAT_CODE_CHARS) + "\n<!-- [truncated] -->"
+    : liveCode;
+
+  req.log.info(
+    { gameId: params.data.id, messageLength: message.length, codeVersion: game.codeVersion },
+    "AI chat edit requested",
+  );
 
   const anthropic = new Anthropic({ apiKey });
+  const userPrompt = `Here is the current game code:\n\n${codeContext}\n\n---\n\nThe user wants this change: ${message}\n\nMake this specific change and return the complete updated working HTML game code only:`;
 
   try {
-    const response = await anthropic.messages.create({
+    // ── Attempt 1 ────────────────────────────────────────────────────────────
+    const r1 = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 8000,
       temperature: 0.9,
       system: CHAT_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Here is the current game code:\n\n${codeContext}\n\n---\n\nThe user wants this change: ${message}\n\nMake this specific change and return the complete updated working HTML game code only:`,
-        },
-      ],
+      messages: [{ role: "user", content: userPrompt }],
     });
+    const rawFull1 = r1.content[0]?.type === "text" ? r1.content[0].text.trim() : "";
+    const { html: html1, changeSummary: cs1 } = extractHtmlAndSummary(rawFull1);
 
-    const rawFull = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    let failure = validateChatHtml(html1, isPhaser);
+    let finalHtml = html1;
+    let finalChangeSummary = cs1;
 
-    // Find the last </html> boundary (case-insensitive)
-    const htmlCloseLower = rawFull.toLowerCase().lastIndexOf("</html>");
-    const htmlEnd = htmlCloseLower !== -1 ? htmlCloseLower + 7 : -1;
+    // ── Attempt 2 — correction round-trip if Attempt 1 failed ───────────────
+    if (failure) {
+      req.log.warn({ gameId: params.data.id, failure }, "Chat attempt 1 invalid — sending correction");
 
-    // Extract CHANGE: summary ONLY from the tail after </html> — never inside the HTML body
-    let changeSummary: string | undefined;
-    if (htmlEnd !== -1) {
-      const tail = rawFull.slice(htmlEnd).trim();
-      const changeMatch = tail.match(/^CHANGE:\s*(.+)$/m);
-      if (changeMatch?.[1]) {
-        changeSummary = changeMatch[1].trim();
+      const r2 = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8000,
+        temperature: 0.9,
+        system: CHAT_SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: userPrompt },
+          { role: "assistant", content: rawFull1 },
+          {
+            role: "user",
+            content: `That code was invalid. Here is what was wrong: ${failure}. Please fix it and return the complete working HTML game code.`,
+          },
+        ],
+      });
+      const rawFull2 = r2.content[0]?.type === "text" ? r2.content[0].text.trim() : "";
+      const { html: html2, changeSummary: cs2 } = extractHtmlAndSummary(rawFull2);
+
+      failure = validateChatHtml(html2, isPhaser);
+      finalHtml = html2;
+      finalChangeSummary = cs2;
+
+      if (failure) {
+        req.log.error({ gameId: params.data.id, failure }, "Chat correction also invalid — rejecting change");
+        res.status(422).json({
+          error: `Could not apply this change after 2 attempts (${failure}). Your game is unchanged — try rephrasing your request.`,
+        });
+        return;
       }
     }
 
-    // Extract just the HTML (up to and including the last </html>)
-    const raw = htmlEnd !== -1 ? rawFull.slice(0, htmlEnd) : rawFull.trim();
+    // ── Escape </script> sequences and persist to DB ──────────────────────────
+    const updatedCode = finalHtml.replace(/<\/script>/gi, "<\\/script>");
+    const newVersion = (game.codeVersion ?? 0) + 1;
 
-    if (!raw.trimStart().startsWith("<")) {
-      req.log.warn({ gameId: params.data.id }, "AI chat returned non-HTML response");
-      res.status(500).json({ error: "AI returned an unexpected response. Please try again." });
-      return;
-    }
+    await db
+      .update(gamesTable)
+      .set({ currentCode: updatedCode, codeVersion: newVersion })
+      .where(eq(gamesTable.id, params.data.id));
 
-    // Escape </script> sequences so they don't break iframe srcdoc
-    const updatedCode = raw.replace(/<\/script>/gi, "<\\/script>");
-
-    req.log.info({ gameId: params.data.id, chars: updatedCode.length }, "AI chat edit applied");
-    res.json({ updatedCode, changeSummary });
+    req.log.info(
+      { gameId: params.data.id, chars: updatedCode.length, codeVersion: newVersion },
+      "AI chat edit applied",
+    );
+    res.json({ updatedCode, changeSummary: finalChangeSummary, codeVersion: newVersion });
   } catch (err: any) {
     req.log.error({ err, gameId: params.data.id }, "AI chat edit failed");
     res.status(500).json({ error: "AI edit failed. Please try again." });
