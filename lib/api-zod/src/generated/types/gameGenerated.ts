@@ -15,4 +15,6 @@ export interface GameGenerated {
      * @maximum 100
      */
   qualityScore?: number;
+  /** Game design document Claude wrote before building the game */
+  gamePlan?: string;
 }

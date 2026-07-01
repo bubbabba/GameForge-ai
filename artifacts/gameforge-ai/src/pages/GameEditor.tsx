@@ -57,10 +57,18 @@ function newMsg(role: ChatRole, text: string, undoable = false): ChatMessage {
   return { id: ++msgIdCounter, role, text, undoable };
 }
 
-const WELCOME: ChatMessage = newMsg(
-  "assistant",
-  "Hi! I'm your game AI. Type a request below and I'll update your game instantly.\n\nTry things like: \"make the player faster\", \"add a double jump\", \"change the background to a forest\", or \"make the enemies harder\".",
-);
+function makeWelcome(gamePlan?: string | null): ChatMessage {
+  if (gamePlan) {
+    return newMsg(
+      "assistant",
+      `Here is what I built:\n\n${gamePlan}\n\n---\nYou can ask me to change anything — try: "make it harder", "add power-ups", "change the colors", "add a new enemy type", or "make the player faster".`,
+    );
+  }
+  return newMsg(
+    "assistant",
+    "Hi! I'm your game AI. Type a request below and I'll update your game instantly.\n\nTry things like: \"make the player faster\", \"add a double jump\", \"change the background to a forest\", or \"make the enemies harder\".",
+  );
+}
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar() {
@@ -330,8 +338,13 @@ export default function GameEditor() {
   const [savedTitle, setSavedTitle] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
+  // Chat state — seed with game plan from sessionStorage if present
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (!id) return [makeWelcome()];
+    const plan = sessionStorage.getItem(`gamePlan_${id}`);
+    if (plan) sessionStorage.removeItem(`gamePlan_${id}`);
+    return [makeWelcome(plan)];
+  });
   const [isThinking, setIsThinking] = useState(false);
 
   // Undo stack — store up to 20 previous code snapshots before AI edits

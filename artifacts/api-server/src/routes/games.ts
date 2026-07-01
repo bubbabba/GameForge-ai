@@ -83,9 +83,14 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       return;
     }
 
-    // ── 2D path: template-based Phaser.js generation ──────────────────────
+    // ── 2D path: two-step Phaser.js generation ────────────────────────────
     const result = await generate2DGame(apiKey, prompt, genre, req.log);
-    res.json(result);
+    res.json({
+      gameCode: result.gameCode,
+      title: result.title,
+      qualityScore: result.qualityScore,
+      gamePlan: result.gamePlan,
+    });
   } catch (err) {
     const error = err as Error & { status?: number };
     req.log.error({ err }, "Claude API call failed");
@@ -394,13 +399,14 @@ router.post("/games/:id/like", requireAuth, async (req: any, res): Promise<void>
 // ── AI Chat Editor ──────────────────────────────────────────────────────────
 
 const CHAT_SYSTEM_PROMPT = [
-  "You are a game editor AI. The user has an existing browser game built with HTML, CSS, and JavaScript.",
-  "Your job is to apply the user's requested change and return the COMPLETE updated game code.",
+  "You are the developer who built this game. The user wants a change.",
+  "You understand the code completely and can modify any part of it.",
   "Rules:",
-  "- Output ONLY the raw HTML document — no prose, no markdown fences (no ```), no explanation before or after",
+  "- Output ONLY the complete updated HTML document — no prose, no markdown fences (no ```), no explanation before or after",
   "- The first character of your response must be '<' and the first line must be '<!DOCTYPE html>'",
+  "- Make this specific change and return the complete updated working code only",
+  "- Be creative — do not just make the minimum change, make it feel good and polished",
   "- Preserve all existing game mechanics unless the user explicitly asks to change them",
-  "- Make the change precise and surgical — do not rewrite sections the user didn't ask about",
   "- The returned code must be fully playable in a browser sandbox with no external dependencies beyond CDN scripts already present",
 ].join(" ");
 
@@ -460,13 +466,14 @@ router.post("/games/:id/chat", requireAuth, async (req, res): Promise<void> => {
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 16000,
+      model: "claude-sonnet-4-6",
+      max_tokens: 8000,
+      temperature: 0.9,
       system: CHAT_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
-          content: `Here is the current game code:\n\n${codeContext}\n\n---\n\nUser request: ${message}\n\nReturn the complete updated HTML game code now:`,
+          content: `Here is the current game code:\n\n${codeContext}\n\n---\n\nThe user wants this change: ${message}\n\nMake this specific change and return the complete updated working HTML game code only:`,
         },
       ],
     });

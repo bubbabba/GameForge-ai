@@ -1,0 +1,63 @@
+"Completely rebuild the game generation prompt system from scratch. Here is the new approach:
+The goal:
+When a user describes their game idea, Claude should genuinely understand their vision and create something unique and playable that matches what they imagined. Not a template, not a reskin — a real creative interpretation of their idea.
+New two-step generation system:
+STEP 1 — Claude plans the game first:
+Send Claude this as the first API call:
+'You are a senior game designer. A user wants to make this game: [USER DESCRIPTION]
+Before writing any code, write a short game design document covering:
+
+Core mechanic (what does the player actually do every second)
+Win condition
+Lose condition
+3 main features that make this game unique
+Controls
+Visual style using only colored shapes
+Difficulty progression
+Keep it under 200 words. Be specific and creative.'
+
+Show the user this plan in the chat panel and say 'Here is what I am going to build' before generating
+STEP 2 — Claude builds the game based on its own plan:
+Send a second API call with:
+SYSTEM: 'You are an expert Phaser.js game developer. You write complete, fully working browser games. You have a creative vision and strong understanding of what makes games fun. Every game you write works perfectly on the first try.'
+USER: 'Build this exact game:
+[INSERT GAME DESIGN DOCUMENT FROM STEP 1]
+Technical requirements:
+
+Use Phaser 3 with this exact config: { type: Phaser.AUTO, width: 800, height: 600, physics: { default: arcade, arcade: { gravity: { y: 0 }, debug: false } }, scene: { preload, create, update } }
+Use only Phaser graphics primitives, no external images
+Player controls must feel responsive and smooth
+Include these Phaser helpers: this.add.text, this.add.graphics, this.physics.add.group
+Game must have exactly these scenes: BootScene (loading), MenuScene (start screen), GameScene (main game), GameOverScene (end screen)
+Every scene must be a proper Phaser class that extends Phaser.Scene
+Physics collisions must use this.physics.add.collider and this.physics.add.overlap
+Player input must use this.cursors = this.input.keyboard.createCursorKeys()
+Score must be tracked and displayed
+Return only raw JavaScript code starting with the word const or class, absolutely nothing else'
+
+After generation — smart validation:
+Before showing the game to the user, run these checks on the generated code:
+
+Contains Phaser.Scene — if not, regenerate
+Contains update() function — if not, regenerate
+Contains create() function — if not, regenerate
+Contains input handling — if not, regenerate
+Is longer than 100 lines — if not, regenerate
+Does not contain the word undefined or placeholder — if it does, regenerate
+Auto regenerate up to 2 times before showing an error
+
+In the chat editor panel:
+After the game loads, Claude should say something like:
+'I built your [game type]! Here is what I created: [short description of what was built]. You can ask me to change anything — try saying things like make it harder, add power ups, change the colors, add a new enemy type, make the player faster'
+The chat should feel like talking to a game developer who built your game and is sitting next to you ready to improve it based on your feedback
+The chat modification system:
+When user sends a follow up message like 'add double jump' send Claude:
+SYSTEM: 'You are the developer who built this game. The user wants a change. You understand the code completely and can modify any part of it.'
+USER: 'Here is the current game code: [FULL CODE]
+The user wants this change: [USER MESSAGE]
+Make this specific change and return the complete updated working code only.
+Be creative — do not just make the minimum change, make it feel good and polished.
+Return only raw JavaScript, nothing else.'
+Max tokens must be set to 8000 for all generation calls
+Temperature should be set to 0.9 to encourage creativity
+Model must be claude-sonnet-4-6"

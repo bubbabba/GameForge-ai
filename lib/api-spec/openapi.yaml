@@ -441,6 +441,9 @@ components:
           minimum: 0
           maximum: 100
           description: AI-assessed quality score (0–100) for the generated game
+        gamePlan:
+          type: string
+          description: Game design document Claude wrote before building the game
 
     # Full game object (with code)
     Game:

@@ -36,7 +36,8 @@ export const generateGameResponseQualityScoreMax = 100;
 export const GenerateGameResponse = zod.object({
   "gameCode": zod.string(),
   "title": zod.string(),
-  "qualityScore": zod.number().min(generateGameResponseQualityScoreMin).max(generateGameResponseQualityScoreMax).optional().describe('AI-assessed quality score (0–100) for the generated game')
+  "qualityScore": zod.number().min(generateGameResponseQualityScoreMin).max(generateGameResponseQualityScoreMax).optional().describe('AI-assessed quality score (0–100) for the generated game'),
+  "gamePlan": zod.string().optional().describe('Game design document Claude wrote before building the game')
 })
 
 

@@ -75,6 +75,7 @@ export default function Home() {
     engine: Engine;
     prompt: string;
     qualityScore?: number;
+    gamePlan?: string;
   } | null>(null);
 
   const selectedGenre = engine === "2d" ? selected2DGenre : selected3DGenre;
@@ -121,6 +122,10 @@ export default function Home() {
               {
                 onSuccess: (saved) => {
                   queryClient.invalidateQueries({ queryKey: ["/api/games/my"] });
+                  // Pass the game plan to the editor via sessionStorage
+                  if (data.gamePlan) {
+                    sessionStorage.setItem(`gamePlan_${saved.id}`, data.gamePlan);
+                  }
                   setLocation(`/game/${saved.id}`);
                 },
                 onError: (err: any) => {
@@ -141,6 +146,7 @@ export default function Home() {
               engine,
               prompt,
               qualityScore: data.qualityScore,
+              gamePlan: data.gamePlan,
             });
           }
         },
@@ -178,6 +184,9 @@ export default function Home() {
       {
         onSuccess: (saved) => {
           queryClient.invalidateQueries({ queryKey: ["/api/games/my"] });
+          if (guestPreview.gamePlan) {
+            sessionStorage.setItem(`gamePlan_${saved.id}`, guestPreview.gamePlan);
+          }
           setLocation(`/game/${saved.id}`);
         },
         onError: (err: any) => {
