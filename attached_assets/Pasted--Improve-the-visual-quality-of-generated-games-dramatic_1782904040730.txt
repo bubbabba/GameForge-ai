@@ -1,0 +1,51 @@
+"Improve the visual quality of generated games dramatically by using AI generated sprites instead of colored shapes. Here is exactly how it should work:
+New visual generation pipeline:
+When a user generates a game, before building the game code run these steps:
+
+Claude reads the game description and identifies every visual element that needs a sprite:
+
+Player character
+Each enemy type
+Collectible items
+Background elements
+Power ups
+Bosses
+
+
+For each element, automatically generate a sprite image using Replicate with this exact prompt style:
+
+Player: 'pixel art [character description], game sprite, transparent background, high detail, front facing, 64x64'
+Enemy/Monster: 'pixel art [monster description], creature sprite, transparent background, menacing, detailed, game asset, 64x64'
+Items: 'pixel art [item description], game item sprite, transparent background, glowing, detailed, 64x64'
+Use the model black-forest-labs/flux-schnell on Replicate for speed
+
+
+Store all generated sprites and pass their URLs into the Phaser game code
+The Phaser game code must use this.load.image to load each sprite URL and use them as actual textures instead of graphics primitives
+Generate sprites in parallel not one by one so it doesnt take too long — use Promise.all to generate all sprites at the same time
+Show the user a loading screen that says what is being generated:
+
+Generating your game...
+Creating player sprite...
+Creating enemy sprites...
+Building game world...
+Almost ready...
+
+
+
+For the background:
+
+Generate a full background image using Replicate at 800x600 resolution
+Prompt style: '[game setting description], game background, detailed, atmospheric, pixel art style, no UI elements, no characters'
+Use this as the game background instead of a solid color
+
+For monsters specifically:
+Make the Replicate prompt very detailed for monsters:
+'pixel art monster sprite, [specific monster description from user], transparent background, detailed shading, glowing eyes, menacing expression, full body visible, game ready sprite, high quality pixel art, 64x64 pixels'
+Fallback:
+If any sprite fails to generate, fall back to a colored shape for that specific element only, not the whole game
+In the editor:
+
+Add a Sprites panel in the right sidebar showing all sprites used in the current game as thumbnails
+Each sprite has a Regenerate button to generate a new version
+Users can click a sprite and describe changes like make it scarier or make it blue and it regenerates with that modification added to the prompt"

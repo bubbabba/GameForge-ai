@@ -53,6 +53,11 @@ function sseError(res: any, message: string): void {
   res.end();
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sseStatus(res: any, message: string): void {
+  try { res.write(`data: ${JSON.stringify({ type: "status", message })}\n\n`); } catch { /* connection closed */ }
+}
+
 // ── Retry wrapper ─────────────────────────────────────────────────────────────
 // Retries once on transient failures; does not retry auth or validation errors.
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
@@ -172,7 +177,7 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       return;
     }
 
-    const result = await withRetry(() => generate2DGame(apiKey, prompt, genre, req.log));
+    const result = await generate2DGame(apiKey, prompt, genre, req.log, (msg) => sseStatus(res, msg));
     stopHeartbeat();
     sseResult(res, {
       gameCode: result.gameCode,
@@ -181,6 +186,8 @@ router.post("/games/generate", async (req, res): Promise<void> => {
       genre,
       qualityScore: result.qualityScore,
       gamePlan: result.gamePlan,
+      sprites: result.sprites,
+      backgroundSprite: result.backgroundSprite,
     });
   } catch (err) {
     stopHeartbeat();
@@ -384,6 +391,7 @@ router.patch("/games/:id", requireAuth, async (req: any, res): Promise<void> => 
     updates.gameCode = body.data.gameCode;
     updates.currentCode = body.data.gameCode; // keep live version in sync with manual saves
   }
+  if (body.data.spritesJson !== undefined) updates.spritesJson = body.data.spritesJson ?? null;
 
   const [updated] = await db
     .update(gamesTable)

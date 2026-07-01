@@ -44,6 +44,7 @@ export default function Home() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const saveGame = useSaveGame();
 
   const { data: recentGames, isLoading: loadingGames } = useListPublicGames(
@@ -65,6 +66,7 @@ export default function Home() {
 
     setGuestPreview(null);
     setGenerateError(null);
+    setStatusMessage(null);
     setIsGenerating(true);
 
     try {
@@ -75,10 +77,19 @@ export default function Home() {
         genre: string;
         qualityScore?: number;
         gamePlan?: string;
-      }>("/api/games/generate", { prompt });
+        sprites?: Array<{ name: string; objectPath: string; url: string; description: string }>;
+        backgroundSprite?: { name: string; objectPath: string; url: string; description: string } | null;
+      }>("/api/games/generate", { prompt }, (msg) => setStatusMessage(msg));
 
       const resolvedGenre = data.genre ?? "Platformer";
       const resolvedEngine = data.engine ?? "2d";
+
+      // Serialize sprites for DB storage (objectPaths, not absolute URLs)
+      const spritesList = [
+        ...(data.sprites ?? []).map((s) => ({ name: s.name, url: s.objectPath, description: s.description })),
+        ...(data.backgroundSprite ? [{ name: "bg", url: data.backgroundSprite.objectPath, description: data.backgroundSprite.description }] : []),
+      ];
+      const spritesJson = spritesList.length > 0 ? JSON.stringify(spritesList) : undefined;
 
       if (isSignedInRef.current) {
         saveGame.mutate(
@@ -88,6 +99,7 @@ export default function Home() {
               genre: resolvedGenre,
               prompt,
               gameCode: data.gameCode,
+              spritesJson,
             },
           },
           {
@@ -122,6 +134,7 @@ export default function Home() {
       setGenerateError(err?.error || "Failed to generate game. Please try again.");
     } finally {
       setIsGenerating(false);
+      setStatusMessage(null);
     }
   };
 
@@ -206,7 +219,7 @@ export default function Home() {
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Forging…
+                    {statusMessage ?? "Forging…"}
                   </>
                 ) : saveGame.isPending ? (
                   <>

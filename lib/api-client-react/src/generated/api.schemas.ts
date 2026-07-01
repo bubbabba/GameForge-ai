@@ -81,6 +81,8 @@ export interface Game {
   codeVersion?: number;
   /** Object-storage path for the AI-generated cover image */
   coverImageUrl?: string | null;
+  /** JSON array of auto-generated sprites: {name, url, description}[] */
+  spritesJson?: string | null;
   status: GameStatus;
   slug: string;
   likesCount: number;
@@ -116,11 +118,13 @@ export interface GameInput {
   genre: string;
   prompt: string;
   gameCode: string;
+  spritesJson?: string | null;
 }
 
 export interface GamePatch {
   title?: string;
   gameCode?: string;
+  spritesJson?: string | null;
 }
 
 export interface GameChatRequest {

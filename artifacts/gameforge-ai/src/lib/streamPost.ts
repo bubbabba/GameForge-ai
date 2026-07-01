@@ -1,5 +1,5 @@
 /**
- * POST to an SSE endpoint and return the final result payload.
+ * POST to an SSE endpoint, optionally reporting status messages, and return the final result payload.
  *
  * The server sends:
  *   data: {"type":"thinking"}          — keep-alive heartbeat (ignored here)
@@ -15,6 +15,7 @@
 export async function streamPost<T>(
   url: string,
   body: unknown,
+  onStatus?: (msg: string) => void,
   signal?: AbortSignal,
 ): Promise<T> {
   let res: Response;
@@ -79,7 +80,11 @@ export async function streamPost<T>(
         continue;
       }
 
-      if (payload.type === "thinking") continue; // heartbeat — keep waiting
+      if (payload.type === "thinking") continue;                 // heartbeat — keep waiting
+      if (payload.type === "status" && typeof payload.message === "string") {
+        onStatus?.(payload.message);
+        continue;
+      }
       if (payload.type === "error") throw { error: payload.error };
       if (payload.type === "result") {
         const { type: _t, ...rest } = payload;

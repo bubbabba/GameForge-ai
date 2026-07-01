@@ -2,13 +2,16 @@
  * Phaser.js 2D game generation via Claude — two-step approach.
  *
  * Step 1: Claude writes a game design document (GDD).
- * Step 2: Claude builds a complete standalone Phaser 3 game from the GDD.
+ * Step 1b: Auto-generate sprites via Replicate (parallel, optional).
+ * Step 2: Claude builds a complete standalone Phaser 3 game from the GDD,
+ *          using sprites if available, falling back to graphics primitives.
  *
  * No template shells — Claude generates the full game logic from scratch,
  * wrapped in a minimal HTML/Phaser CDN page.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { generateGameSprites, type GeneratedSprite } from "./generateGameSprites";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -46,7 +49,7 @@ Before writing any code, write a short game design document covering:
 - Lose condition
 - 3 main features that make this game unique
 - Controls
-- Visual style using only colored shapes
+- Visual style and character descriptions
 - Difficulty progression
 
 Keep it under 200 words. Be specific and creative.`;
@@ -67,15 +70,75 @@ CRITICAL RULES — never violate these:
 - The start screen instruction text MUST say exactly: "CLICK ANYWHERE OR PRESS SPACE TO START"
 - Use ONLY Phaser's built-in input system for all user interaction.`;
 
-function buildBuilderMessage(gdd: string): string {
+interface SpriteManifest {
+  sprites: GeneratedSprite[];
+  background: GeneratedSprite | null;
+}
+
+function buildBuilderMessage(gdd: string, spriteManifest?: SpriteManifest): string {
+  const hasSprites = spriteManifest && (spriteManifest.sprites.length > 0 || spriteManifest.background);
+
+  let spriteSection: string;
+  if (hasSprites) {
+    const m = spriteManifest!;
+
+    // Build load lines only for successfully generated sprites
+    const loadLines: string[] = [];
+    if (m.background) loadLines.push(`  this.load.image('bg', '${m.background.url}');`);
+    for (const s of m.sprites) loadLines.push(`  this.load.image('${s.name}', '${s.url}');`);
+
+    // Background create line (only if background sprite generated)
+    const bgCreate = m.background
+      ? `  this.add.image(400, 300, 'bg').setDisplaySize(800, 600).setDepth(-10);`
+      : `  // No background sprite — use this.add.rectangle(400,300,800,600,0x1a1a2e).setDepth(-10); for a dark bg`;
+
+    // Build per-entity usage instructions based on what actually succeeded
+    const usageLines: string[] = [];
+    const spriteKeys = new Set(m.sprites.map((s) => s.name));
+
+    if (spriteKeys.has("player")) {
+      usageLines.push("- Player: this.player = this.physics.add.image(x, y, 'player').setDisplaySize(48, 48)");
+    } else {
+      usageLines.push("- Player: use this.add.graphics() (no player sprite was generated)");
+    }
+    const enemyKeys = ["enemy", "enemy2", "enemy3"].filter((k) => spriteKeys.has(k));
+    if (enemyKeys.length > 0) {
+      usageLines.push(`- Enemies (use these keys: ${enemyKeys.map((k) => `'${k}'`).join(", ")}): this.physics.add.image(x, y, '${enemyKeys[0]}').setDisplaySize(48, 48)`);
+    } else {
+      usageLines.push("- Enemies: use this.add.graphics() (no enemy sprite was generated)");
+    }
+    const itemKeys = ["item", "item2"].filter((k) => spriteKeys.has(k));
+    if (itemKeys.length > 0) {
+      usageLines.push(`- Items/collectibles (use these keys: ${itemKeys.map((k) => `'${k}'`).join(", ")}): this.physics.add.image(x, y, '${itemKeys[0]}').setDisplaySize(28, 28)`);
+    }
+
+    spriteSection = `
+SPRITES — Pre-generated pixel art sprites are provided. Use ONLY the keys listed below (do NOT use a key that isn't listed — use graphics primitives for missing elements).
+
+In BootScene preload(), load every sprite (copy these lines exactly):
+${loadLines.join("\n")}
+
+In GameScene create(), add background AS THE FIRST LINE before any physics objects:
+${bgCreate}
+
+Per-entity usage (only use sprite keys that appear in the load list above):
+${usageLines.join("\n")}
+- You may still use this.add.graphics() for UI elements (health bars, score backgrounds) and any entity whose sprite key is not in the load list
+- setOrigin(0.5) is the default for images — no need to set it explicitly
+- For groups: this.physics.add.group() then group.create(x, y, 'enemy').setDisplaySize(48, 48)
+`;
+  } else {
+    spriteSection = `  - Use only Phaser graphics primitives (this.add.graphics), no external images\n`;
+  }
+
   return `Build this exact game:
 ${gdd}
 
 Technical requirements:
 - Use Phaser 3 with this exact config: { type: Phaser.AUTO, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } }, scene: [BootScene, MenuScene, GameScene, GameOverScene] }
-- Use only Phaser graphics primitives, no external images
+${spriteSection}
 - Player controls must feel responsive and smooth
-- Include these Phaser helpers: this.add.text, this.add.graphics, this.physics.add.group
+- Include these Phaser helpers: this.add.text, this.physics.add.group
 - Game must have exactly these scenes: BootScene (loading), MenuScene (start screen), GameScene (main game), GameOverScene (end screen)
 - Every scene must be a proper Phaser class that extends Phaser.Scene
 - Physics collisions must use this.physics.add.collider and this.physics.add.overlap
@@ -137,6 +200,8 @@ export interface Generate2DResult {
   title: string;
   qualityScore: number;
   gamePlan: string;
+  sprites: GeneratedSprite[];
+  backgroundSprite: GeneratedSprite | null;
 }
 
 export async function generate2DGame(
@@ -145,35 +210,68 @@ export async function generate2DGame(
   genre: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any,
+  onStatus?: (msg: string) => void,
 ): Promise<Generate2DResult> {
   const anthropic = new Anthropic({ apiKey, timeout: 120_000 });
 
-  // ── Step 1: Planning ────────────────────────────────────────────────────────
+  const emitStatus = (msg: string) => {
+    onStatus?.(msg);
+  };
+
+  // ── Step 1: Planning (with one retry on transient failure) ──────────────────
+  emitStatus("Designing your game...");
   logger?.info({ promptLength: prompt.length }, "Step 1: generating game design document");
 
-  const planResponse = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    temperature: 0.9,
-    system: PLANNER_SYSTEM,
-    messages: [{ role: "user", content: buildPlannerMessage(prompt) }],
-  });
+  async function planGame(): Promise<string> {
+    const res = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
+      temperature: 0.9,
+      system: PLANNER_SYSTEM,
+      messages: [{ role: "user", content: buildPlannerMessage(prompt) }],
+    });
+    return res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
+  }
 
-  const gamePlan =
-    planResponse.content[0]?.type === "text"
-      ? planResponse.content[0].text.trim()
-      : `A ${genre} game based on: ${prompt}`;
+  let gamePlan: string;
+  try {
+    gamePlan = await planGame();
+  } catch {
+    gamePlan = await planGame(); // single retry on transient error
+  }
+  if (!gamePlan) gamePlan = `A ${genre} game based on: ${prompt}`;
 
   logger?.info({ planLength: gamePlan.length }, "Step 1 complete — design document ready");
 
+  // ── Step 1b: Sprite generation (parallel with Step 2 setup) ────────────────
+  let spriteManifest: SpriteManifest | undefined;
+
+  if (process.env.REPLICATE_API_KEY) {
+    try {
+      const { sprites, backgroundSprite } = await generateGameSprites(
+        apiKey,
+        gamePlan,
+        prompt,
+        emitStatus,
+      );
+      spriteManifest = { sprites, background: backgroundSprite };
+      logger?.info({ spriteCount: sprites.length, hasBackground: !!backgroundSprite }, "Sprites generated");
+    } catch (err) {
+      logger?.warn({ err }, "Sprite generation failed — falling back to graphics primitives");
+      spriteManifest = undefined;
+    }
+  }
+
   // ── Step 2: Build the game ──────────────────────────────────────────────────
+  emitStatus("Building game code...");
+
   async function buildGame(): Promise<string> {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 16000,
       temperature: 0.9,
       system: BUILDER_SYSTEM,
-      messages: [{ role: "user", content: buildBuilderMessage(gamePlan) }],
+      messages: [{ role: "user", content: buildBuilderMessage(gamePlan, spriteManifest) }],
     });
     const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
     return stripFences(raw);
@@ -216,5 +314,13 @@ export async function generate2DGame(
   const qualityScore = computeQualityScore(finalLogic, getValidationFailure(finalLogic), retried);
 
   logger?.info({ title, qualityScore }, "2D game generated successfully");
-  return { gameCode, title, qualityScore, gamePlan };
+
+  return {
+    gameCode,
+    title,
+    qualityScore,
+    gamePlan,
+    sprites: spriteManifest?.sprites ?? [],
+    backgroundSprite: spriteManifest?.background ?? null,
+  };
 }

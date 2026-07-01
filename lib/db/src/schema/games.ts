@@ -19,6 +19,8 @@ export const gamesTable = pgTable("games", {
   codeVersion: integer("code_version").notNull().default(0),
   /** Object-storage path for the AI-generated cover image (e.g. /objects/images/{uuid}) */
   coverImageUrl: text("cover_image_url"),
+  /** JSON array of auto-generated sprites: { name, url, objectPath, description }[] */
+  spritesJson: text("sprites_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

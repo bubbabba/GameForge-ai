@@ -7,3 +7,4 @@
 - [Lib rebuild order](lib-rebuild-order.md) — After any schema change: rebuild lib/db → api-zod → api-client-react (tsc -p tsconfig.json each). Then typecheck api-server and gameforge-ai. Never skip db rebuild when gamesTable changes.
 - [Image generation setup](image-generation.md) — Replicate (stability-ai/sdxl) for covers + sprites; GCS via objectStorageClient.bucket().file().save(); zod must be a direct dep of api-server; images are public assets (no ACL on /storage/objects/*).
 - [SSE resilience pattern](sse-resilience.md) — generate + chat routes use SSE with 10s heartbeats; server timeout 180s; Anthropic timeout 120s; streamPost() client utility; useGenerateGame/useChatEditGame removed from frontend.
+- [Sprite generation pipeline](sprite-generation-pipeline.md) — auto-generates pixel art sprites before Phaser build step; objectPath in DB, absolute URL in game code; graceful per-element fallback; psql migration required for sprites_json column.

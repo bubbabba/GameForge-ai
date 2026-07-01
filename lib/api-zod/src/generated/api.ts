@@ -97,7 +97,8 @@ export const SaveGameBody = zod.object({
   "title": zod.string().min(1),
   "genre": zod.string(),
   "prompt": zod.string(),
-  "gameCode": zod.string()
+  "gameCode": zod.string(),
+  "spritesJson": zod.string().nullable().optional()
 })
 
 export const SaveGameResponse = zod.object({
@@ -109,6 +110,7 @@ export const SaveGameResponse = zod.object({
   "currentCode": zod.string().nullable().optional(),
   "codeVersion": zod.number().optional(),
   "coverImageUrl": zod.string().nullable().optional(),
+  "spritesJson": zod.string().nullable().optional(),
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
@@ -135,6 +137,7 @@ export const GetGameResponse = zod.object({
   "currentCode": zod.string().nullable().optional(),
   "codeVersion": zod.number().optional(),
   "coverImageUrl": zod.string().nullable().optional(),
+  "spritesJson": zod.string().nullable().optional(),
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
@@ -154,7 +157,8 @@ export const UpdateGameParams = zod.object({
 
 export const UpdateGameBody = zod.object({
   "title": zod.string().optional(),
-  "gameCode": zod.string().optional()
+  "gameCode": zod.string().optional(),
+  "spritesJson": zod.string().nullable().optional()
 })
 
 export const UpdateGameResponse = zod.object({
@@ -166,6 +170,7 @@ export const UpdateGameResponse = zod.object({
   "currentCode": zod.string().nullable().optional(),
   "codeVersion": zod.number().optional(),
   "coverImageUrl": zod.string().nullable().optional(),
+  "spritesJson": zod.string().nullable().optional(),
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),

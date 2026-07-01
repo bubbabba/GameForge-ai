@@ -75,3 +75,23 @@ export async function generateSprite(description: string): Promise<string> {
 
   return uploadImageFromUrl(imageUrl, "image/png");
 }
+
+/**
+ * Generate an image from an arbitrary prompt with a chosen aspect ratio.
+ * Returns the objectPath (e.g. "/objects/images/{uuid}").
+ */
+export async function generateSpriteFromPrompt(
+  prompt: string,
+  aspectRatio: "1:1" | "4:3" = "1:1",
+): Promise<string> {
+  const replicate = getReplicateClient();
+  const imageUrl = await runFlux(replicate, {
+    prompt,
+    aspect_ratio: aspectRatio,
+    num_outputs: 1,
+    output_format: "png",
+    output_quality: 90,
+    go_fast: true,
+  });
+  return uploadImageFromUrl(imageUrl, "image/png");
+}

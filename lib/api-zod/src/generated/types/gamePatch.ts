@@ -9,4 +9,5 @@
 export interface GamePatch {
   title?: string;
   gameCode?: string;
+  spritesJson?: string | null;
 }

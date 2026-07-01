@@ -12,4 +12,5 @@ export interface GameInput {
   genre: string;
   prompt: string;
   gameCode: string;
+  spritesJson?: string | null;
 }

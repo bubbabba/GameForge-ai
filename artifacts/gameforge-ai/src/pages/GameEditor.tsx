@@ -665,7 +665,21 @@ export default function GameEditor() {
         return r.json() as Promise<{ spriteUrl: string }>;
       }),
     onSuccess: (data: { spriteUrl: string }, description: string) => {
-      setSprites((prev) => [{ url: data.spriteUrl, description }, ...prev]);
+      setSprites((prev) => {
+        const updated = [{ url: data.spriteUrl, description }, ...prev];
+        // Persist updated sprite list to DB so they reload on next visit
+        if (id) {
+          const spritesJson = JSON.stringify(
+            updated.map((s, i) => ({ name: `sprite_${i}`, url: s.url, description: s.description })),
+          );
+          fetch(`/api/games/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ spritesJson }),
+          }).catch(() => {/* non-critical */});
+        }
+        return updated;
+      });
     },
     onError: (err: any) => {
       toast({
@@ -723,7 +737,15 @@ export default function GameEditor() {
       setIframeKey((k) => k + 1);
       setCodeVersion(game.codeVersion ?? 0);
       setCoverImageUrl(game.coverImageUrl ?? null);
-      setSprites([]);  // reset sprites when switching games to avoid cross-game leakage
+      // Load auto-generated sprites from DB (exclude background sprite from the panel)
+      try {
+        const stored: Array<{ name: string; url: string; description: string }> = game.spritesJson
+          ? JSON.parse(game.spritesJson)
+          : [];
+        setSprites(stored.filter((s) => s.name !== "bg").map(({ url, description }) => ({ url, description })));
+      } catch {
+        setSprites([]);
+      }
       // Always anchor originalCode to this specific game's initial code
       originalCode.current = liveCode;
       // Clear history stacks — they belong to the previous game
