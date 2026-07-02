@@ -228,6 +228,8 @@ export async function generate3DGame(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any,
   onStatus?: (msg: string) => void,
+  /** Pre-approved plan text — prepended to the user message if provided */
+  approvedPlan?: string,
 ): Promise<Generate3DResult> {
   const shell        = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
   const systemPrompt = GENRE_SYSTEM_PROMPTS[genre] ?? DEFAULT_GENRE_PROMPT;
@@ -246,7 +248,16 @@ export async function generate3DGame(
       if (simplified) {
         onStatus?.(`⚠️ Retrying (attempt ${attempt}/${MAX_3D_RETRIES})…`);
       }
-      const candidate = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, simplified));
+      // When an approved plan is provided, always use it — even on retries.
+      // Retries get a shorter (trimmed) version of the plan to reduce token load.
+      let userMsg: string;
+      if (approvedPlan) {
+        const planText = simplified ? approvedPlan.slice(0, 1000) + "\n[implement core mechanics only]" : approvedPlan;
+        userMsg = `APPROVED GAME DESIGN PLAN:\n${planText}\n\nImplement this exact plan as JavaScript game logic. Output ONLY raw JavaScript — no HTML, no markdown fences, no import statements, no explanations. Your code will be injected into a pre-built Three.js HTML shell.\n\nKey reminder:\n- Already defined: THREE, scene, camera, renderer, clock, keys, hud, controlsEl, showOverlay, hideOverlay, W, H\n- You MUST define: function gameUpdate(delta) { ... }\n- You SHOULD define: function gameRestart() { ... }\n- Add ALL game objects to scene with scene.add(...)\n- Use basic BoxGeometry/SphereGeometry shapes — no external assets\n- No placeholder comments or TODO stubs — every function must be fully implemented\n\nStart your JavaScript code immediately:`;
+      } else {
+        userMsg = buildUserMessage(prompt, simplified);
+      }
+      const candidate = await callClaude3D(anthropic, systemPrompt, userMsg);
 
       if (!candidate.includes("gameUpdate")) {
         throw new Error("Missing required gameUpdate function");

@@ -405,30 +405,37 @@ export async function generate2DGame(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any,
   onStatus?: (msg: string) => void,
+  /** Pre-approved plan text — when provided, the GDD call is skipped entirely */
+  approvedPlan?: string,
 ): Promise<Generate2DResult> {
   const anthropic = new Anthropic({ apiKey, timeout: CHUNK_TIMEOUT_MS });
   const status = (msg: string) => onStatus?.(msg);
   const retriesRef = { count: 0 };
 
-  // ── Call 1: GDD ─────────────────────────────────────────────────────────────
-  status("📐 Designing your game…");
-  logger?.info({ promptLen: prompt.length }, "Chunk 1: GDD");
-
-  const gamePlan = await withChunkRetry(
-    async () => {
-      const res = await anthropic.messages.create({
-        model: MODEL, max_tokens: 1024, temperature: TEMP_CREATIVE,
-        system: PLANNER_SYSTEM,
-        messages: [{ role: "user", content: `User wants: ${prompt}\n\nWrite the game design document.` }],
-      });
-      const text = res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
-      if (!text || text.length < 50) throw new Error("GDD too short");
-      return text;
-    },
-    "GDD", retriesRef, status, logger,
-  ).catch(() => `A ${genre} game based on: ${prompt}`);
-
-  logger?.info({ planLen: gamePlan.length }, "Chunk 1 done");
+  // ── Call 1: GDD (skipped when caller supplies an approved plan) ───────────────
+  let gamePlan: string;
+  if (approvedPlan) {
+    gamePlan = approvedPlan;
+    logger?.info({ planLen: approvedPlan.length }, "Chunk 1 skipped — using pre-approved plan");
+    status("📐 Using your approved game plan…");
+  } else {
+    status("📐 Designing your game…");
+    logger?.info({ promptLen: prompt.length }, "Chunk 1: GDD");
+    gamePlan = await withChunkRetry(
+      async () => {
+        const res = await anthropic.messages.create({
+          model: MODEL, max_tokens: 1024, temperature: TEMP_CREATIVE,
+          system: PLANNER_SYSTEM,
+          messages: [{ role: "user", content: `User wants: ${prompt}\n\nWrite the game design document.` }],
+        });
+        const text = res.content[0]?.type === "text" ? res.content[0].text.trim() : "";
+        if (!text || text.length < 50) throw new Error("GDD too short");
+        return text;
+      },
+      "GDD", retriesRef, status, logger,
+    ).catch(() => `A ${genre} game based on: ${prompt}`);
+    logger?.info({ planLen: gamePlan.length }, "Chunk 1 done");
+  }
 
   // ── Call 1b: Visual element extraction ──────────────────────────────────────
   let spriteSpecs: SpriteSpec[] = [];

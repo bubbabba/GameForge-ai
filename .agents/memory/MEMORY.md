@@ -9,3 +9,4 @@
 - [Image generation setup](image-generation.md) — Replicate (stability-ai/sdxl) for covers + sprites; GCS via objectStorageClient.bucket().file().save(); zod must be a direct dep of api-server; images are public assets (no ACL on /storage/objects/*).
 - [SSE resilience pattern](sse-resilience.md) — generate + chat routes use SSE with 10s heartbeats; server timeout 180s; Anthropic timeout 120s; streamPost() client utility; useGenerateGame/useChatEditGame removed from frontend.
 - [Sprite generation pipeline](sprite-generation-pipeline.md) — auto-generates pixel art sprites before Phaser build step; objectPath in DB, absolute URL in game code; graceful per-element fallback; psql migration required for sprites_json column.
+- [Game plan approval flow](game-plan-approval.md) — Two-step create: plan→approve/adjust→generate. parsePlanJson uses regex extraction; approved plan replaces GDD call; stale-plan warning when prompt changes post-plan.

@@ -42,6 +42,21 @@ export interface GameRequest {
   prompt: string;
   genre?: GameRequestGenre;
   engine?: GameRequestEngine;
+  /** Pre-approved plan JSON string — when present, the GDD step is skipped */
+  approvedPlan?: string;
+}
+
+export interface GamePlan {
+  title: string;
+  concept: string;
+  playerCharacter: string;
+  mainMechanic: string;
+  enemies: string;
+  levelStructure: string;
+  winCondition: string;
+  loseCondition: string;
+  visualStyle: string;
+  features: string[];
 }
 
 export interface GameGenerated {

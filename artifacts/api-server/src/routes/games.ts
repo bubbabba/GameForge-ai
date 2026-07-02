@@ -16,6 +16,8 @@ import {
   ListPublicGamesQueryParams,
   ChatEditGameParams,
   ChatEditGameBody,
+  PlanGameBody,
+  RefinePlanBody,
 } from "@workspace/api-zod";
 import { generate3DGame } from "../lib/generate3d";
 import { generate2DGame } from "../lib/generate2d";
@@ -131,6 +133,204 @@ function classifyPrompt(prompt: string): { engine: "2d" | "3d"; genre: string } 
   return { engine, genre };
 }
 
+// ── Plan helpers ─────────────────────────────────────────────────────────────
+
+interface GamePlan {
+  title: string;
+  concept: string;
+  playerCharacter: string;
+  mainMechanic: string;
+  enemies: string;
+  levelStructure: string;
+  winCondition: string;
+  loseCondition: string;
+  visualStyle: string;
+  features: string[];
+}
+
+function parsePlanJson(text: string): GamePlan {
+  // Robustly extract the first JSON object even if Claude wraps it in prose/fences
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const raw = jsonMatch ? jsonMatch[0] : text;
+  try {
+    const p = JSON.parse(raw);
+    if (typeof p !== "object" || p === null) throw new Error("not an object");
+    return {
+      title: String(p.title ?? "Untitled Game"),
+      concept: String(p.concept ?? ""),
+      playerCharacter: String(p.playerCharacter ?? ""),
+      mainMechanic: String(p.mainMechanic ?? ""),
+      enemies: String(p.enemies ?? ""),
+      levelStructure: String(p.levelStructure ?? ""),
+      winCondition: String(p.winCondition ?? ""),
+      loseCondition: String(p.loseCondition ?? ""),
+      visualStyle: String(p.visualStyle ?? ""),
+      features: Array.isArray(p.features) ? p.features.map(String) : [],
+    };
+  } catch {
+    // Surface a real error message so callers can tell the user something went wrong
+    throw new Error("Plan generation produced invalid JSON — please try again.");
+  }
+}
+
+function formatApprovedPlan(plan: GamePlan): string {
+  return `APPROVED GAME DESIGN DOCUMENT
+═══════════════════════════════════════
+
+TITLE: ${plan.title}
+
+CORE CONCEPT:
+${plan.concept}
+
+PLAYER CHARACTER:
+${plan.playerCharacter}
+
+MAIN MECHANIC:
+${plan.mainMechanic}
+
+ENEMIES & CHALLENGES:
+${plan.enemies}
+
+LEVEL STRUCTURE:
+${plan.levelStructure}
+
+WIN CONDITION: ${plan.winCondition}
+LOSE CONDITION: ${plan.loseCondition}
+
+VISUAL STYLE:
+${plan.visualStyle}
+
+KEY FEATURES:
+${plan.features.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}`;
+}
+
+const PLAN_SYSTEM_PROMPT = `You are an expert game designer. Generate a detailed, structured game design plan for a browser game.
+
+Output ONLY a valid JSON object with exactly these fields (no markdown, no code fences, no text before or after):
+{
+  "title": "3-6 word catchy game title",
+  "concept": "2-3 sentences: core experience and what makes it unique and fun",
+  "playerCharacter": "Who the player is, appearance, special abilities, and movement style",
+  "mainMechanic": "The single core action the player performs every second of gameplay",
+  "enemies": "2-4 specifically named enemy types with individual behaviors and attack patterns",
+  "levelStructure": "Number of levels/areas, how they connect, and how difficulty scales",
+  "winCondition": "The exact moment the player wins — what must be achieved",
+  "loseCondition": "The exact failure condition — health/lives system, timer, instant death, etc.",
+  "visualStyle": "Specific color palette, art style (pixel art/vector/etc.), atmosphere, and mood",
+  "features": ["6-8 concrete implemented features as an array of specific strings"]
+}
+
+RULES:
+- Be SPECIFIC. Never write "various enemies" — name them: "Crawler", "Sentinel", "Boss King".
+- Be CREATIVE. Make the title catchy and the concept genuinely interesting.
+- Keep each field to 1-3 dense sentences. Be informative, not vague.
+- Output ONLY the JSON object. Nothing before or after.`;
+
+const REFINE_SYSTEM_PROMPT = `You are an expert game designer refining a game plan based on user feedback.
+
+Receive: the current plan as JSON + user feedback text.
+Output: the updated plan as JSON with the same field structure.
+
+Apply the user's requested changes while keeping everything they didn't mention.
+Be SPECIFIC — if they say "make it scarier", add horror elements to concept, enemies, and visual style.
+If they say "add multiplayer", note it in mainMechanic and features.
+
+Output ONLY the updated JSON object. No markdown, no explanation.`;
+
+// ── Plan generation ───────────────────────────────────────────────────────────
+
+router.post("/games/plan", async (req, res): Promise<void> => {
+  const apiKey = process.env.CLAUDE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "CLAUDE_API_KEY is not configured." });
+    return;
+  }
+
+  const parsed = PlanGameBody.safeParse(req.body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    res.status(400).json({ error: `${issue?.path?.[0] ?? "request"}: ${issue?.message}` });
+    return;
+  }
+
+  const { prompt } = parsed.data;
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    res.status(400).json({ error: `Prompt too long (max ${MAX_PROMPT_LENGTH} chars).` });
+    return;
+  }
+
+  const { engine, genre } = classifyPrompt(prompt);
+  const stopHeartbeat = startSSE(res);
+  res.on("close", stopHeartbeat);
+  sseStatus(res, "Designing your game plan…");
+
+  try {
+    const anthropic = new Anthropic({ apiKey, timeout: 35_000 });
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      temperature: 0.9,
+      system: PLAN_SYSTEM_PROMPT,
+      messages: [{
+        role: "user",
+        content: `Game idea: "${prompt}"\nEngine: ${engine === "3d" ? "Three.js 3D" : "Phaser.js 2D"}\nGenre: ${genre}\n\nGenerate the game design plan.`,
+      }],
+    });
+    const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+    const plan = parsePlanJson(text);
+    req.log.info({ title: plan.title }, "Game plan generated");
+    stopHeartbeat();
+    sseResult(res, { plan, engine, genre });
+  } catch (err: any) {
+    stopHeartbeat();
+    sseError(res, err?.message ?? "Plan generation failed. Please try again.");
+  }
+});
+
+// ── Plan refinement ───────────────────────────────────────────────────────────
+
+router.post("/games/plan/refine", async (req, res): Promise<void> => {
+  const apiKey = process.env.CLAUDE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "CLAUDE_API_KEY is not configured." });
+    return;
+  }
+
+  const parsed = RefinePlanBody.safeParse(req.body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    res.status(400).json({ error: `${issue?.path?.[0] ?? "request"}: ${issue?.message}` });
+    return;
+  }
+
+  const { planJson, feedback } = parsed.data;
+  const stopHeartbeat = startSSE(res);
+  res.on("close", stopHeartbeat);
+  sseStatus(res, "Refining your game plan…");
+
+  try {
+    const anthropic = new Anthropic({ apiKey, timeout: 35_000 });
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      temperature: 0.7,
+      system: REFINE_SYSTEM_PROMPT,
+      messages: [{
+        role: "user",
+        content: `CURRENT PLAN:\n${planJson}\n\nUSER FEEDBACK:\n${feedback}`,
+      }],
+    });
+    const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+    const plan = parsePlanJson(text);
+    req.log.info({ title: plan.title }, "Game plan refined");
+    stopHeartbeat();
+    sseResult(res, { plan });
+  } catch (err: any) {
+    stopHeartbeat();
+    sseError(res, err?.message ?? "Plan refinement failed. Please try again.");
+  }
+});
+
 // ── AI Generation ──────────────────────────────────────────────────────────
 
 router.post("/games/generate", async (req, res): Promise<void> => {
@@ -150,18 +350,30 @@ router.post("/games/generate", async (req, res): Promise<void> => {
     return;
   }
 
-  const { prompt } = parsed.data;
+  const { prompt, approvedPlan: approvedPlanJson } = parsed.data;
 
   if (prompt.length > MAX_PROMPT_LENGTH) {
     res.status(400).json({ error: `Prompt too long. Max ${MAX_PROMPT_LENGTH} characters.` });
     return;
   }
 
+  // If the caller provided an approved plan JSON, format it into readable text
+  let formattedPlan: string | undefined;
+  if (approvedPlanJson) {
+    try {
+      const planObj = JSON.parse(approvedPlanJson);
+      formattedPlan = formatApprovedPlan(planObj);
+    } catch {
+      formattedPlan = approvedPlanJson; // treat as raw text if not valid JSON
+    }
+    req.log.info({ planLen: formattedPlan.length }, "Using pre-approved game plan");
+  }
+
   // Auto-classify: ignore any client-sent genre/engine; Claude decides.
   const { engine, genre } = classifyPrompt(prompt);
   const is3D = engine === "3d";
 
-  req.log.info({ genre, engine, promptLength: prompt.length }, "Generating game with Claude (auto-classified)");
+  req.log.info({ genre, engine, promptLength: prompt.length, hasPlan: !!formattedPlan }, "Generating game with Claude (auto-classified)");
 
   // All validation passed — switch to SSE so the connection stays alive
   // during the long Claude generation (heartbeat every 10 s).
@@ -171,14 +383,14 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
   try {
     if (is3D) {
-      const result = await withRetry(() => generate3DGame(apiKey, prompt, genre, req.log));
+      const result = await withRetry(() => generate3DGame(apiKey, prompt, genre, req.log, (msg) => sseStatus(res, msg), formattedPlan));
       req.log.info({ title: result.title }, "3D game generated successfully");
       stopHeartbeat();
       sseResult(res, { ...result, engine, genre });
       return;
     }
 
-    const result = await generate2DGame(apiKey, prompt, genre, req.log, (msg) => sseStatus(res, msg));
+    const result = await generate2DGame(apiKey, prompt, genre, req.log, (msg) => sseStatus(res, msg), formattedPlan);
     stopHeartbeat();
     sseResult(res, {
       gameCode: result.gameCode,

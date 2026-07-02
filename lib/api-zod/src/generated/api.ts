@@ -25,7 +25,43 @@ export const generateGameBodyEngineDefault = `2d`;
 export const GenerateGameBody = zod.object({
   "prompt": zod.string().min(1),
   "genre": zod.enum(['Platformer', 'Horror', 'Shooter', 'Puzzle', 'Racing', 'RPG', 'Adventure', 'Fantasy', 'FP Horror', 'Space Shooter']).optional(),
-  "engine": zod.enum(['2d', '3d']).optional()
+  "engine": zod.enum(['2d', '3d']).optional(),
+  /** Pre-approved plan JSON string — when present, the GDD step is skipped */
+  "approvedPlan": zod.string().optional(),
+})
+
+// ── Plan generation ──────────────────────────────────────────────────────────
+
+export const PlanGameBody = zod.object({
+  "prompt": zod.string().min(1),
+})
+
+export const GamePlanObject = zod.object({
+  "title": zod.string(),
+  "concept": zod.string(),
+  "playerCharacter": zod.string(),
+  "mainMechanic": zod.string(),
+  "enemies": zod.string(),
+  "levelStructure": zod.string(),
+  "winCondition": zod.string(),
+  "loseCondition": zod.string(),
+  "visualStyle": zod.string(),
+  "features": zod.array(zod.string()),
+})
+
+export const PlanGameResponse = zod.object({
+  "plan": GamePlanObject,
+  "engine": zod.enum(['2d', '3d']),
+  "genre": zod.string(),
+})
+
+export const RefinePlanBody = zod.object({
+  "planJson": zod.string().min(1),
+  "feedback": zod.string().min(1),
+})
+
+export const RefinePlanResponse = zod.object({
+  "plan": GamePlanObject,
 })
 
 export const generateGameResponseQualityScoreMin = 0;
