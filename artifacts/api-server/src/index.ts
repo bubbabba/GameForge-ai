@@ -24,7 +24,10 @@ server.on("error", (err) => {
   process.exit(1);
 });
 
-// Allow Claude API calls that can take up to ~3 minutes
-server.setTimeout(180_000);
-server.keepAliveTimeout = 180_000;
-server.headersTimeout = 185_000;
+// Game generation runs as a sequence of up to 5-6 chunked Claude calls
+// (each up to 65s, with up to 3 retries on failure) — worst case can exceed
+// 10 minutes, so the socket timeout must comfortably exceed that instead of
+// the old single-call ~3 minute assumption.
+server.setTimeout(600_000);
+server.keepAliveTimeout = 600_000;
+server.headersTimeout = 605_000;

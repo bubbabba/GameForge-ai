@@ -52,7 +52,7 @@ export default function Explore() {
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
               sort === opt.value
-                ? "bg-primary/20 text-primary shadow-[0_0_8px_rgba(34,197,94,0.15)]"
+                ? "bg-primary/20 text-primary shadow-[0_0_8px_rgba(217,162,62,0.15)]"
                 : "text-muted-foreground hover:text-foreground hover:bg-white/5"
             )}
           >
@@ -80,7 +80,7 @@ export default function Explore() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
               genre === "" 
-                ? "bg-primary text-primary-foreground shadow-[0_0_10px_rgba(34,197,94,0.3)]" 
+                ? "bg-primary text-primary-foreground shadow-[0_0_10px_rgba(217,162,62,0.3)]" 
                 : "bg-card border border-border text-muted-foreground hover:bg-white/5"
             )}
           >
@@ -93,7 +93,7 @@ export default function Explore() {
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
                 genre === g 
-                  ? "bg-primary/20 text-primary border border-primary shadow-[0_0_10px_rgba(34,197,94,0.15)]" 
+                  ? "bg-primary/20 text-primary border border-primary shadow-[0_0_10px_rgba(217,162,62,0.15)]" 
                   : "bg-card border border-border text-muted-foreground hover:bg-white/5"
               )}
             >

@@ -425,7 +425,7 @@ export default function Home() {
                 onClick={planPhase === "plan_ready" ? handlePlan : handlePlan}
                 disabled={isBusy || !prompt.trim()}
                 data-testid="create-game-button"
-                className="w-full sm:w-auto shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all"
+                className="w-full sm:w-auto shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-8 shadow-[0_0_20px_rgba(217,162,62,0.3)] hover:shadow-[0_0_30px_rgba(217,162,62,0.4)] transition-all"
               >
                 {buttonIcon()}
                 {buttonLabel()}
@@ -542,7 +542,7 @@ export default function Home() {
                     <Button
                       onClick={handleApprovePlan}
                       disabled={isGenerating || saveGame.isPending}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.4)]"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-[0_0_20px_rgba(217,162,62,0.3)] hover:shadow-[0_0_30px_rgba(217,162,62,0.4)]"
                     >
                       {isGenerating ? (
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -674,7 +674,7 @@ export default function Home() {
                   </Button>
                 ) : (
                   <Link href="/sign-in">
-                    <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+                    <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(217,162,62,0.3)]">
                       <LogIn className="w-4 h-4 mr-2" />
                       Sign in to save &amp; edit
                     </Button>

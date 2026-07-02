@@ -46,7 +46,7 @@ export default function Sidebar() {
     <aside className="w-[240px] fixed top-0 bottom-0 left-0 bg-card border-r border-border flex flex-col z-50">
       <div className="p-6">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:border-primary/50 transition-colors shadow-[0_0_10px_rgba(34,197,94,0.15)]">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:border-primary/50 transition-colors shadow-[0_0_10px_rgba(217,162,62,0.15)]">
             <Gamepad2 className="w-5 h-5 text-primary" />
           </div>
           <span className="font-display font-bold text-lg tracking-tight">GameForge<span className="text-primary">.AI</span></span>
@@ -94,7 +94,7 @@ export default function Sidebar() {
             <Link href="/sign-in" className="w-full py-2 px-4 rounded-md text-sm font-medium bg-white/5 hover:bg-white/10 text-center transition-colors">
               Sign In
             </Link>
-            <Link href="/sign-up" className="w-full py-2 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 text-center transition-all shadow-[0_0_15px_rgba(34,197,94,0.3)] hover:shadow-[0_0_20px_rgba(34,197,94,0.4)]">
+            <Link href="/sign-up" className="w-full py-2 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 text-center transition-all shadow-[0_0_15px_rgba(217,162,62,0.3)] hover:shadow-[0_0_20px_rgba(217,162,62,0.4)]">
               Sign Up
             </Link>
           </div>

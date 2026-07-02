@@ -20,7 +20,7 @@ export default function Profile() {
       <div className="flex flex-col md:flex-row items-center md:items-start gap-8 mb-16 bg-card border border-border p-8 rounded-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
         
-        <div className="w-32 h-32 rounded-full bg-primary/20 border-4 border-background shadow-[0_0_30px_rgba(34,197,94,0.2)] flex items-center justify-center relative z-10 shrink-0">
+        <div className="w-32 h-32 rounded-full bg-primary/20 border-4 border-background shadow-[0_0_30px_rgba(217,162,62,0.2)] flex items-center justify-center relative z-10 shrink-0">
           <span className="text-5xl font-bold text-primary font-display">
             {user?.firstName?.charAt(0) || user?.username?.charAt(0) || "U"}
           </span>

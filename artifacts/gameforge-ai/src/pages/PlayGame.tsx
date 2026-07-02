@@ -141,7 +141,7 @@ export default function PlayGame() {
   const ratingCount: number = (game as any).ratingCount ?? 0;
 
   return (
-    <div className="flex flex-col bg-background">
+    <div className="relative z-10 flex flex-col">
       {/* Rating prompt (modal overlay) */}
       {showRatingPrompt && (
         <RatingPrompt

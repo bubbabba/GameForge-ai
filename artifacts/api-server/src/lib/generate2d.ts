@@ -120,6 +120,14 @@ function detectTruncation(code: string): boolean {
   return false;
 }
 
+/** Reject HTML/DOM-based interaction — every chunk must rely on Phaser input events instead. */
+function findDomButtonUsage(code: string): string | null {
+  if (/<button[\s>]/i.test(code)) return "Contains an HTML <button> element — use Phaser input events instead";
+  if (/document\.(querySelector|getElementById|createElement)/.test(code))
+    return "Uses HTML/DOM APIs — use Phaser input events instead";
+  return null;
+}
+
 /** Verify all required labeled blocks are present and properly closed. */
 function validateChunk3(code: string): string | null {
   const required = [
@@ -129,7 +137,7 @@ function validateChunk3(code: string): string | null {
   for (const label of required) {
     if (!code.includes(label)) return `Missing required label: ${label}`;
   }
-  return null;
+  return findDomButtonUsage(code);
 }
 
 function validateChunk4(code: string): string | null {
@@ -142,7 +150,7 @@ function validateChunk4(code: string): string | null {
     if (!code.includes(label)) return `Missing required label: ${label}`;
   }
   if (!code.includes("GameOverScene")) return "Missing GameOverScene class";
-  return null;
+  return findDomButtonUsage(code);
 }
 
 /** After assembly, confirm all labeled blocks were consumed and key structures remain. */
@@ -167,6 +175,8 @@ function getValidationFailure(code: string): string | null {
   if (nonEmpty < 80)                            return `Too short: ${nonEmpty} lines (need 80+)`;
   if (/\bplaceholder\b/i.test(code))            return "Contains placeholder text";
   if (/\bundefined\b/.test(code))               return "Contains literal 'undefined'";
+  const domFailure = findDomButtonUsage(code);
+  if (domFailure)                               return domFailure;
   if (detectTruncation(code))                   return "Output appears truncated";
   return null;
 }
@@ -273,6 +283,7 @@ Start: class BootScene extends Phaser.Scene {`;
 const CHUNK3_SYSTEM = `You are an expert Phaser.js developer adding an enemy system to an existing game.
 
 Output ONLY the new enemy code — do NOT rewrite the whole game.
+CRITICAL: NEVER use HTML/DOM APIs (no document.querySelector, no HTML buttons/divs). All interaction must go through Phaser input (this.input.keyboard, this.input.on('pointerdown', ...)).
 You MUST produce ALL of these labeled blocks in EXACTLY this format:
 
 // ===ENEMIES_CREATE===
@@ -327,6 +338,7 @@ class GameOverScene extends Phaser.Scene {
 
 ALL SIX ===*=== and ===*_END=== markers are REQUIRED.
 GameOverScene MUST have BOTH listeners: this.input.keyboard.once('keydown-SPACE', ...) AND this.input.on('pointerdown', ...) to restart.
+CRITICAL: NEVER use HTML/DOM APIs (no document.querySelector, no HTML buttons/divs, no createElement). "Restart", "Play Again", and every other on-screen action MUST be a Phaser input listener (keyboard or pointerdown) — never an HTML <button>.
 Write concise code. No full-game rewrites. No markdown.`;
 
 function buildChunk4Message(gdd: string, skeleton: string, chunk3: string): string {
@@ -361,6 +373,7 @@ EXACT ASSEMBLY PROCEDURE (follow in order):
 9. Every sprite must have .setDisplaySize(w,h)
 10. Background must be first line in GameScene.create() with .setDepth(-10)
 11. MenuScene MUST have BOTH: this.input.keyboard.once('keydown-SPACE', ...) AND this.input.on('pointerdown', ...)
+12. NEVER introduce HTML/DOM APIs (no document.querySelector, no HTML buttons/divs, no createElement). If any input chunk added a DOM-based button, replace it with the equivalent Phaser input listener — every "Start", "Restart", or "Play Again" action must be a Phaser keyboard/pointerdown listener, never an HTML <button>.
 
 REQUIRED FINAL LINES (verbatim — nothing after):
 var config = { type: Phaser.AUTO, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } }, scene: [BootScene, MenuScene, GameScene, GameOverScene] };

@@ -75,7 +75,7 @@ export default function MyGames() {
           <p className="text-muted-foreground text-lg mt-2">Manage your drafts and published creations.</p>
         </div>
         <Link href="/">
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_15px_rgba(217,162,62,0.3)]">
             <Plus className="w-4 h-4 mr-2" /> New Game
           </Button>
         </Link>

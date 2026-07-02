@@ -10,6 +10,7 @@ import { Gamepad2 } from 'lucide-react';
 import { setAuthTokenGetter } from '@workspace/api-client-react';
 
 import AppShell from "./components/layout/AppShell";
+import AmbientBackground from "./components/layout/AmbientBackground";
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
 import MyGames from "./pages/MyGames";
@@ -46,16 +47,16 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
   variables: {
-    colorPrimary: "hsl(142 71% 45%)",
-    colorForeground: "hsl(0 0% 98%)",
-    colorMutedForeground: "hsl(0 0% 65%)",
-    colorDanger: "hsl(350 100% 60%)",
-    colorBackground: "hsl(0 0% 7%)",
-    colorInput: "hsl(0 0% 12%)",
-    colorInputForeground: "hsl(0 0% 98%)",
-    colorNeutral: "hsl(0 0% 15%)",
+    colorPrimary: "hsl(35 75% 58%)",
+    colorForeground: "hsl(40 35% 93%)",
+    colorMutedForeground: "hsl(45 14% 62%)",
+    colorDanger: "hsl(12 62% 52%)",
+    colorBackground: "hsl(145 16% 10%)",
+    colorInput: "hsl(140 14% 14%)",
+    colorInputForeground: "hsl(40 35% 93%)",
+    colorNeutral: "hsl(140 14% 18%)",
     fontFamily: "'Plus Jakarta Sans', sans-serif",
-    borderRadius: "0.5rem",
+    borderRadius: "0.75rem",
   },
   elements: {
     rootBox: "w-full flex justify-center",
@@ -75,7 +76,7 @@ const clerkAppearance = {
     logoBox: "flex justify-center mb-4",
     logoImage: "h-12 w-auto",
     socialButtonsBlockButton: "border-border hover:bg-white/5 transition-colors",
-    formButtonPrimary: "bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all",
+    formButtonPrimary: "bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-[0_0_15px_rgba(217,162,62,0.3)] transition-all",
     formFieldInput: "bg-input border-border text-foreground focus:ring-primary focus:border-primary",
     footerAction: "bg-card",
     dividerLine: "bg-border",
@@ -88,7 +89,7 @@ const clerkAppearance = {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <div className="relative z-10 flex min-h-[100dvh] items-center justify-center px-4">
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
     </div>
   );
@@ -96,7 +97,7 @@ function SignInPage() {
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+    <div className="relative z-10 flex min-h-[100dvh] items-center justify-center px-4">
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
     </div>
   );
@@ -105,14 +106,14 @@ function SignUpPage() {
 function AuthPrompt({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-[0_0_20px_rgba(34,197,94,0.15)]">
+      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-[0_0_20px_rgba(217,162,62,0.15)]">
         <Gamepad2 className="w-8 h-8 text-primary" />
       </div>
       <div>
         <h2 className="text-2xl font-display font-bold mb-2">{message}</h2>
         <p className="text-muted-foreground max-w-sm">Join GameForge AI to create, play, and share amazing games.</p>
       </div>
-      <Link href="/sign-in" className="px-6 py-3 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+      <Link href="/sign-in" className="px-6 py-3 bg-primary text-primary-foreground font-medium rounded-md hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(217,162,62,0.3)]">
         Sign In
       </Link>
     </div>
@@ -226,6 +227,7 @@ function ClerkProviderWithRoutes() {
 export default function App() {
   return (
     <WouterRouter base={basePath}>
+      <AmbientBackground />
       <ClerkProviderWithRoutes />
     </WouterRouter>
   );

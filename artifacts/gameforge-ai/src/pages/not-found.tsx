@@ -14,7 +14,7 @@ export default function NotFound() {
         The page you are looking for doesn't exist, has been moved, or you don't have permission to view it.
       </p>
       <Link href="/">
-        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg rounded-xl shadow-[0_0_20px_rgba(217,162,62,0.2)]">
           Return to Dashboard
         </Button>
       </Link>

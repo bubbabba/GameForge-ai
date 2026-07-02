@@ -921,7 +921,13 @@ function validateChatHtml(html: string, isPhaser: boolean): string | null {
     if (!html.includes("Phaser.Scene")) return "Missing Phaser.Scene class";
     if (!/create\s*\(/.test(html)) return "Missing create() function";
     if (!/update\s*\(/.test(html)) return "Missing update() function";
+    // Three.js shells legitimately use document.getElementById/createElement for
+    // their HUD/canvas boilerplate, so only enforce this for Phaser games.
+    if (/document\.(querySelector|getElementById|createElement)/.test(html))
+      return "Uses HTML/DOM APIs for interaction — use Phaser input events instead";
   }
+  // A literal <button> is never legitimate gameplay interaction in either engine.
+  if (/<button[\s>]/i.test(html)) return "Contains an HTML <button> element — use engine input events instead";
   return null;
 }
 
@@ -935,6 +941,7 @@ const CHAT_SYSTEM_PROMPT = [
   "- If the user asks for something that would break the game, do it in a safe way and explain what you did differently",
   "- Always return the complete full game code with the change applied",
   "- Never return partial code. Never use placeholders. Always return a complete working game.",
+  "- NEVER use HTML/DOM APIs for gameplay interaction (no document.querySelector, no HTML <button>/<div> click handlers, no createElement). Every in-game action — Start, Restart, Play Again, menu selection, etc. — MUST be wired through the game engine's own input system (Phaser: this.input.keyboard / this.input.on('pointerdown', ...); Three.js: the existing keys{} object or canvas pointer listeners). If the existing code already has an HTML button controlling gameplay, replace it with the equivalent engine-native input listener.",
   "",
   "Output format:",
   "1. The first character of your response must be '<' and it must start with '<!DOCTYPE html>' — no markdown fences, no prose before the HTML.",

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -54,79 +54,90 @@
 
 :root {
   --app-font-sans: 'Plus Jakarta Sans', sans-serif;
-  --app-font-display: 'Space Grotesk', sans-serif;
+  --app-font-display: 'Fraunces', serif;
   --app-font-mono: 'JetBrains Mono', monospace;
-  --radius: 0.5rem;
+  --radius: 0.75rem;
 
-  --background: 0 0% 4%;
-  --foreground: 0 0% 98%;
-  --border: 0 0% 15%;
-  --input: 0 0% 12%;
-  --ring: 142 71% 45%;
-  
-  --card: 0 0% 7%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 15%;
-  
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 0 0% 15%;
-  
-  --primary: 142 71% 45%;
-  --primary-foreground: 0 0% 4%;
-  --primary-border: 142 71% 40%;
-  
-  --secondary: 0 0% 12%;
-  --secondary-foreground: 0 0% 98%;
-  --secondary-border: 0 0% 15%;
-  
-  --muted: 0 0% 10%;
-  --muted-foreground: 0 0% 65%;
-  --muted-border: 0 0% 15%;
-  
-  --accent: 142 71% 45%;
-  --accent-foreground: 0 0% 4%;
-  --accent-border: 142 71% 40%;
-  
-  --destructive: 350 100% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --destructive-border: 350 100% 50%;
+  /* Nature-cozy dusk palette: deep forest background, warm amber glow,
+     mossy sage secondary accent — a cabin-in-the-woods-at-dusk feel. */
+  --background: 155 22% 7%;
+  --foreground: 40 35% 93%;
+  --border: 140 14% 18%;
+  --input: 140 14% 14%;
+  --ring: 35 75% 58%;
+
+  --card: 145 16% 10%;
+  --card-foreground: 40 35% 93%;
+  --card-border: 140 14% 18%;
+
+  --popover: 145 16% 10%;
+  --popover-foreground: 40 35% 93%;
+  --popover-border: 140 14% 18%;
+
+  --primary: 35 75% 58%;
+  --primary-foreground: 30 25% 10%;
+  --primary-border: 35 70% 48%;
+
+  --secondary: 140 14% 14%;
+  --secondary-foreground: 40 30% 90%;
+  --secondary-border: 140 14% 18%;
+
+  --muted: 140 14% 12%;
+  --muted-foreground: 45 14% 62%;
+  --muted-border: 140 14% 18%;
+
+  --accent: 130 22% 42%;
+  --accent-foreground: 40 35% 95%;
+  --accent-border: 130 20% 34%;
+
+  --destructive: 12 62% 52%;
+  --destructive-foreground: 40 35% 95%;
+  --destructive-border: 12 58% 42%;
+
+  /* Ambient scene tones — used by the animated background, not the design system */
+  --ambient-moss: 130 30% 30%;
+  --ambient-amber: 35 75% 50%;
+  --ambient-teal: 175 30% 25%;
 }
 
 .dark {
-  --background: 0 0% 4%;
-  --foreground: 0 0% 98%;
-  --border: 0 0% 15%;
-  --input: 0 0% 12%;
-  --ring: 142 71% 45%;
-  
-  --card: 0 0% 7%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 0 0% 15%;
-  
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 0 0% 15%;
-  
-  --primary: 142 71% 45%;
-  --primary-foreground: 0 0% 4%;
-  --primary-border: 142 71% 40%;
-  
-  --secondary: 0 0% 12%;
-  --secondary-foreground: 0 0% 98%;
-  --secondary-border: 0 0% 15%;
-  
-  --muted: 0 0% 10%;
-  --muted-foreground: 0 0% 65%;
-  --muted-border: 0 0% 15%;
-  
-  --accent: 142 71% 45%;
-  --accent-foreground: 0 0% 4%;
-  --accent-border: 142 71% 40%;
-  
-  --destructive: 350 100% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --destructive-border: 350 100% 50%;
+  --background: 155 22% 7%;
+  --foreground: 40 35% 93%;
+  --border: 140 14% 18%;
+  --input: 140 14% 14%;
+  --ring: 35 75% 58%;
+
+  --card: 145 16% 10%;
+  --card-foreground: 40 35% 93%;
+  --card-border: 140 14% 18%;
+
+  --popover: 145 16% 10%;
+  --popover-foreground: 40 35% 93%;
+  --popover-border: 140 14% 18%;
+
+  --primary: 35 75% 58%;
+  --primary-foreground: 30 25% 10%;
+  --primary-border: 35 70% 48%;
+
+  --secondary: 140 14% 14%;
+  --secondary-foreground: 40 30% 90%;
+  --secondary-border: 140 14% 18%;
+
+  --muted: 140 14% 12%;
+  --muted-foreground: 45 14% 62%;
+  --muted-border: 140 14% 18%;
+
+  --accent: 130 22% 42%;
+  --accent-foreground: 40 35% 95%;
+  --accent-border: 130 20% 34%;
+
+  --destructive: 12 62% 52%;
+  --destructive-foreground: 40 35% 95%;
+  --destructive-border: 12 58% 42%;
+
+  --ambient-moss: 130 30% 30%;
+  --ambient-amber: 35 75% 50%;
+  --ambient-teal: 175 30% 25%;
 }
 
 @layer base {
@@ -138,5 +149,70 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+  }
+}
+
+/* ── Ambient scene background ──────────────────────────────────────────────
+   Slow-drifting blurred "aurora" blobs + gently rising fireflies, sitting
+   fixed behind all page content for a faint, living nature backdrop. */
+@layer components {
+  .ambient-scene {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .ambient-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.28;
+    will-change: transform;
+  }
+
+  .ambient-firefly {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: hsl(var(--ambient-amber));
+    box-shadow: 0 0 8px 2px hsl(var(--ambient-amber) / 0.8);
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+}
+
+@keyframes ambient-drift-a {
+  0%   { transform: translate(-4%, -2%) scale(1); }
+  50%  { transform: translate(6%, 5%) scale(1.15); }
+  100% { transform: translate(-4%, -2%) scale(1); }
+}
+
+@keyframes ambient-drift-b {
+  0%   { transform: translate(3%, 4%) scale(1.05); }
+  50%  { transform: translate(-6%, -6%) scale(0.95); }
+  100% { transform: translate(3%, 4%) scale(1.05); }
+}
+
+@keyframes ambient-drift-c {
+  0%   { transform: translate(0%, 6%) scale(1); }
+  50%  { transform: translate(-5%, -4%) scale(1.1); }
+  100% { transform: translate(0%, 6%) scale(1); }
+}
+
+@keyframes ambient-firefly-rise {
+  0%   { transform: translateY(0) translateX(0); opacity: 0; }
+  10%  { opacity: 0.9; }
+  50%  { transform: translateY(-45vh) translateX(2vw); opacity: 0.6; }
+  90%  { opacity: 0.2; }
+  100% { transform: translateY(-75vh) translateX(-1.5vw); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-blob,
+  .ambient-firefly {
+    animation: none !important;
   }
 }

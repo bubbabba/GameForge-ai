@@ -71,7 +71,7 @@ export default function GameCard({ game, variant = "public", onDelete, onPublish
   };
 
   return (
-    <div className="group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(34,197,94,0.1)] transition-all duration-300 hover:-translate-y-1">
+    <div className="group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 hover:shadow-[0_0_20px_rgba(217,162,62,0.1)] transition-all duration-300 hover:-translate-y-1">
       <div className={cn("h-32 p-4 flex flex-col justify-between relative bg-gradient-to-b overflow-hidden", gradientClass)}>
         {/* AI-generated cover image (shown behind content) */}
         {game.coverImageUrl && (
@@ -109,7 +109,7 @@ export default function GameCard({ game, variant = "public", onDelete, onPublish
           {variant === "public" ? (
             <>
               <Link href={`/play/${game.slug}`} className="flex-1">
-                <Button className="w-full bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/20 hover:border-primary shadow-none transition-all group-hover:shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+                <Button className="w-full bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/20 hover:border-primary shadow-none transition-all group-hover:shadow-[0_0_15px_rgba(217,162,62,0.3)]">
                   <Play className="w-4 h-4 mr-2" /> Play
                 </Button>
               </Link>

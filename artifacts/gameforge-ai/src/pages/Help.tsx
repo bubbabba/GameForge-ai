@@ -4,7 +4,7 @@ export default function Help() {
   return (
     <div className="flex-1 px-6 lg:px-12 py-12 max-w-4xl mx-auto w-full">
       <div className="mb-12 text-center">
-        <div className="w-16 h-16 mx-auto bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(34,197,94,0.15)]">
+        <div className="w-16 h-16 mx-auto bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_20px_rgba(217,162,62,0.15)]">
           <HelpCircle className="w-8 h-8 text-primary" />
         </div>
         <h1 className="text-4xl font-display font-bold mb-4">How can we help?</h1>
