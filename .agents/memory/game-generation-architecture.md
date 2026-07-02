@@ -1,46 +1,45 @@
 ---
 name: Game generation architecture
-description: How the 2D/3D game generation pipeline works after the two-step rebuild.
+description: How 2D and 3D games are generated — chunked pipeline, models, temperatures, timeouts, and retry strategy.
 ---
 
-## 2D generation (generate2d.ts)
+## 2D Generation — 5-call chunked pipeline (generate2d.ts)
 
-Two-step Claude pipeline, no template shells:
+Replaced the original single 16k-token call (which timed out) with 5 focused calls.
 
-1. **Step 1 — Planning**: Claude writes a ≤200-word game design document covering mechanic, win/lose, 3 unique features, controls, visual style, difficulty. Model: `claude-sonnet-4-6`, temp: 0.9, max_tokens: 1024.
+**Each call**: claude-sonnet-4-6, max_tokens 8000, 65s timeout, up to 3 retries with exponential back-off.
 
-2. **Step 2 — Build**: Claude builds a complete standalone Phaser 3 game (JS only) from the GDD. Model: `claude-sonnet-4-6`, temp: 0.9, max_tokens: 8000. Result is wrapped in a minimal HTML+CDN page (`WRAPPER_HEAD` + JS + `WRAPPER_FOOT`).
+| # | Call | max_tokens | temp | What it produces |
+|---|------|-----------|------|-----------------|
+| 1 | GDD | 1024 | 0.9 | Game design document (<250 words) |
+| 1b | Visual elements | — | — | Sprite specs + GameContext (identifyVisualElements) |
+| 2 | Skeleton | 8000 | 0.9 | 4 scene class stubs + player movement, **===ENEMIES=== / ===UI=== placeholders** |
+| 3 | Enemy additions | 8000 | 0.9 | ONLY labeled blocks (===ENEMIES_CREATE===…END, ===ENEMIES_UPDATE===…END, ===ENEMY_CLASSES===…END) |
+| 4 | UI additions | 8000 | 0.9 | ONLY labeled blocks (===UI_CREATE===…END, ===UI_UPDATE===…END, ===GAMEOVER_SCENE===…END) |
+| 5 | Assembly | 8000 | 0.2 | Merges skeleton + enemy blocks + UI blocks + sprite preload → final game |
 
-**Validation** (6 checks, auto-retry up to 2 times, hard throw on final failure):
-- Contains `Phaser.Scene`
-- Has `update(` function
-- Has `create(` function
-- Has keyboard/input handling
-- 100+ non-empty lines
-- No `placeholder` or `undefined` (word-level match)
+**Why labeled additions** (not progressive full rewrites): chunks 3/4 produce only their delta, so no call ever needs to output a growing full game that could exceed 8k. The assembler inserts them at the exact named placeholders.
 
-**Returns**: `{ gameCode, title, qualityScore, gamePlan }`
+**Why `===*===` / `===*_END===` markers**: deterministic assembly. The assembler prompt lists exact insertion points per marker. Post-assembly, `validateAssembly()` checks that no markers remain in the output.
 
-**Why:** Replaced the template-shell injection approach (which limited Claude's creative range) with full autonomous game construction, enabling genuinely unique games per user description.
+**Truncation detection** (`detectTruncation()`): last non-empty line must match `/^[}\s]*;?\s*$/`; brace imbalance >2 = truncated.
 
-## 3D generation (generate3d.ts)
+**Retry helper** (`withChunkRetry`): mutable `retriesRef.count` shared across all chunks, exponential back-off, 4× multiplier on 429/529 errors.
 
-Still uses Three.js shells. Updated to: model `claude-sonnet-4-6`, temp 0.9, max_tokens 8000.
+**gamePlan flow**: generated → returned in SSE result → stored in DB → also written to sessionStorage for GameEditor chat → used to re-derive sprite specs at generate-sprites time.
 
-## Chat route (routes/games.ts)
+## 3D Generation — single call (generate3d.ts)
 
-Model: `claude-sonnet-4-6`, temp: 0.9, max_tokens: 8000. System prompt: "developer who built this game" framing. Receives full HTML, returns full updated HTML.
+| Param | Value |
+|-------|-------|
+| Model | claude-sonnet-4-6 |
+| max_tokens | 8000 (was 16000) |
+| Timeout | 65 s (was 120 s) |
+| Retries | Up to 3, simplified prompt on retry 2+ |
+| Temperature | 0.9 |
 
-## gamePlan threading
+Generates only the `gameUpdate(delta)` function + setup code injected into a hardcoded Three.js HTML shell (per-genre).
 
-- API response: `GameGenerated.gamePlan?: string` (in openapi.yaml → codegen → api-zod + api-client-react)
-- Home.tsx: stores plan in `sessionStorage` with key `gamePlan_${id}` before `setLocation(/game/${id})`
-- GameEditor.tsx: reads and deletes sessionStorage entry in `useState` initializer, shows plan in first chat bubble via `makeWelcome(plan)`
+Truncation detection: same `/^[}\s]*;?\s*$/` last-line check + brace imbalance >2.
 
-## Source file edit warning
-
-`phaserTemplates.ts` still exists (used for Sokoban puzzle shell and others) but is no longer imported by `generate2d.ts`. Any future edits to `phaserTemplates.ts` must use Python (not the Edit tool) due to `'$'` in template literals — see `phaser-template-edit-hazard.md`.
-
-## `</script>` in TypeScript source
-
-Any literal string `</script>` in a `.ts` file causes TS1002 "Unterminated string literal". Always use string concatenation: `"</" + "script>"` or a pre-defined constant. Same applies to regex literals — use `new RegExp(...)` form.
+**Why:** the old single 120s/16k call timed out frequently. 65s/8k with retry is fast enough for the ~200-line 3D logic output and eliminates the timeout.

@@ -2,7 +2,7 @@
 - [AI chat editor panel](ai-chat-editor.md) — POST /games/:id/chat + 4-panel GameEditor; race condition fix: textarea locked (readOnly) while isThinking.
 - [Prompt length fix](prompt-length-fix.md) — MAX_PROMPT_LENGTH was 1000 chars (rejecting detailed prompts); raised to 4000. Zod errors now return human-readable field:message instead of raw JSON.
 - [Phaser template edit hazard](phaser-template-edit-hazard.md) — Edit tool mangles '$' inside phaserTemplates.ts template literals; always use Python for edits touching that char.
-- [Game generation architecture](game-generation-architecture.md) — 2D: two-step (plan GDD then build full JS), no shells, claude-sonnet-4-6, temp 0.9; gamePlan in API then sessionStorage then editor chat.
+- [Game generation architecture](game-generation-architecture.md) — 2D: 5-call chunked pipeline (GDD→visuals→skeleton→enemies→UI→assemble), 65s/8k per call, labeled additions; 3D: single call 8k/65s with retry.
 - [Chat route DB-authoritative code](chat-route-db-code.md) — Chat route fetches currentCode from DB (not client), validates HTML, retries once, persists codeVersion; currentCode is optional/deprecated in API contract.
 - [Chat editor black screen fix](chat-black-screen-fix.md) — Two causes: (1) `<\/script>` escaping in chat route broke srcDoc HTML parsing; (2) max_tokens:8000 truncated large games. Both fixed; validator now also requires `</html>` and checks stop_reason.
 - [Lib rebuild order](lib-rebuild-order.md) — After any schema change: rebuild lib/db → api-zod → api-client-react (tsc -p tsconfig.json each). Then typecheck api-server and gameforge-ai. Never skip db rebuild when gamesTable changes.

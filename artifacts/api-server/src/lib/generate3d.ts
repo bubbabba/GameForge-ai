@@ -180,6 +180,21 @@ function stripFences(text: string): string {
   return s;
 }
 
+const CHUNK_TIMEOUT_3D = 65_000; // 65 s per chunk (60 s + buffer)
+const MAX_3D_RETRIES   = 3;
+
+/** Detect if 3D game logic output was cut off at the token limit. */
+function detectTruncation3D(code: string): boolean {
+  if (!code.trim()) return true;
+  const lastLine = code.trimEnd().split("\n").filter((l) => l.trim()).pop() ?? "";
+  // Last line must be an explicit closing brace or semicolon terminator
+  if (!/^[}\s]*;?\s*$/.test(lastLine)) return true;
+  // More than 2 unclosed braces = definitely truncated
+  const opens  = (code.match(/\{/g) ?? []).length;
+  const closes = (code.match(/\}/g) ?? []).length;
+  return opens - closes > 2;
+}
+
 async function callClaude3D(
   anthropic: Anthropic,
   systemPrompt: string,
@@ -187,7 +202,7 @@ async function callClaude3D(
 ): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 16000,
+    max_tokens: 8000,         // 8 k per call — never times out
     temperature: 0.9,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
@@ -212,32 +227,61 @@ export async function generate3DGame(
   genre: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   logger?: any,
+  onStatus?: (msg: string) => void,
 ): Promise<Generate3DResult> {
-  const shell = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
+  const shell        = THREE_JS_SHELLS[genre] ?? DEFAULT_3D_SHELL;
   const systemPrompt = GENRE_SYSTEM_PROMPTS[genre] ?? DEFAULT_GENRE_PROMPT;
-  const anthropic = new Anthropic({ apiKey, timeout: 120_000 });
+  // 65 s per-call timeout — if one call fails we retry up to 3× before giving up
+  const anthropic = new Anthropic({ apiKey, timeout: CHUNK_TIMEOUT_3D });
 
-  let logic: string;
-  try {
-    logic = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, false));
-    logger?.info({ chars: logic.length }, "3D game generated (attempt 1)");
-  } catch (firstErr) {
-    logger?.warn({ err: firstErr }, "First 3D attempt failed — retrying with simplified prompt");
-    logic = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, true));
-    logger?.info({ chars: logic.length }, "3D game generated (attempt 2 — simplified)");
+  onStatus?.("🎮 Building your 3D game…");
+  let logic = "";
+  let lastErr: unknown;
+  let attempt = 0;
+
+  while (attempt < MAX_3D_RETRIES) {
+    attempt++;
+    try {
+      const simplified = attempt > 1;
+      if (simplified) {
+        onStatus?.(`⚠️ Retrying (attempt ${attempt}/${MAX_3D_RETRIES})…`);
+      }
+      const candidate = await callClaude3D(anthropic, systemPrompt, buildUserMessage(prompt, simplified));
+
+      if (!candidate.includes("gameUpdate")) {
+        throw new Error("Missing required gameUpdate function");
+      }
+      if (detectTruncation3D(candidate)) {
+        throw new Error("Output appears truncated — retry with simpler prompt");
+      }
+
+      logic = candidate;
+      logger?.info({ chars: logic.length, attempt }, `3D game generated (attempt ${attempt})`);
+      break;
+    } catch (err: any) {
+      lastErr = err;
+      logger?.warn({ err, attempt }, `3D attempt ${attempt} failed`);
+      if (attempt < MAX_3D_RETRIES) {
+        // Back-off: longer for rate-limit errors
+        const isOverload = err?.status === 429 || err?.status === 529 || err?.message?.includes("overloaded");
+        await new Promise((r) => setTimeout(r, isOverload ? 5000 * attempt : 1500 * attempt));
+      }
+    }
   }
 
-  // ── Shell-injection safety ──────────────────────────────────────────────
-  // Any literal </script> in Claude's JS (even in strings/comments) would
-  // prematurely close the outer <script> tag; escape it away.
+  if (!logic) {
+    throw new Error(`3D game generation failed after ${MAX_3D_RETRIES} attempts: ${(lastErr as Error)?.message ?? lastErr}`);
+  }
+
+  // Escape </script> to prevent premature tag closure in the HTML shell
   logic = logic.replace(/<\/script>/gi, "<\\/script>");
 
-  // Inject into shell
   const gameCode = shell.replace("${GAME_LOGIC}", logic);
 
   const titleWords = prompt.split(" ").slice(0, 5)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
   const title = `${titleWords} [3D ${genre}]`;
 
+  onStatus?.("✅ 3D game ready!");
   return { gameCode, title };
 }
