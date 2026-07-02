@@ -166,10 +166,21 @@ interface GamePlan {
   features: string[];
 }
 
+// Strips markdown code fences and any prose before/after the JSON object,
+// since Claude occasionally wraps its output despite being told not to.
+function cleanJsonText(text: string): string {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/```(?:json)?/gi, "").trim();
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  return cleaned.trim();
+}
+
 function parsePlanJson(text: string): GamePlan {
-  // Robustly extract the first JSON object even if Claude wraps it in prose/fences
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  const raw = jsonMatch ? jsonMatch[0] : text;
+  const raw = cleanJsonText(text);
   try {
     const p = JSON.parse(raw);
     if (typeof p !== "object" || p === null) throw new Error("not an object");
@@ -242,7 +253,7 @@ RULES:
 - Be SPECIFIC. Never write "various enemies" — name them: "Crawler", "Sentinel", "Boss King".
 - Be CREATIVE. Make the title catchy and the concept genuinely interesting.
 - Keep each field to 1-3 dense sentences. Be informative, not vague.
-- Output ONLY the JSON object. Nothing before or after.`;
+- Return ONLY raw JSON. No markdown, no backticks, no code fences, no commentary — your entire response must be parseable by JSON.parse() as-is.`;
 
 const REFINE_SYSTEM_PROMPT = `You are an expert game designer refining a game plan based on user feedback.
 
@@ -253,7 +264,7 @@ Apply the user's requested changes while keeping everything they didn't mention.
 Be SPECIFIC — if they say "make it scarier", add horror elements to concept, enemies, and visual style.
 If they say "add multiplayer", note it in mainMechanic and features.
 
-Output ONLY the updated JSON object. No markdown, no explanation.`;
+Return ONLY raw JSON. No markdown, no backticks, no code fences, no commentary — your entire response must be parseable by JSON.parse() as-is.`;
 
 // ── Plan generation ───────────────────────────────────────────────────────────
 
@@ -284,18 +295,20 @@ router.post("/games/plan", async (req, res): Promise<void> => {
 
   try {
     const anthropic = new Anthropic({ apiKey, timeout: 35_000 });
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1200,
-      temperature: 0.9,
-      system: PLAN_SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: `Game idea: "${prompt}"\nEngine: ${engine === "3d" ? "Three.js 3D" : "Phaser.js 2D"}\nGenre: ${genre}\n\nGenerate the game design plan.`,
-      }],
+    const plan = await withRetry(async () => {
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1200,
+        temperature: 0.9,
+        system: PLAN_SYSTEM_PROMPT,
+        messages: [{
+          role: "user",
+          content: `Game idea: "${prompt}"\nEngine: ${engine === "3d" ? "Three.js 3D" : "Phaser.js 2D"}\nGenre: ${genre}\n\nGenerate the game design plan.`,
+        }],
+      });
+      const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+      return parsePlanJson(text);
     });
-    const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
-    const plan = parsePlanJson(text);
     req.log.info({ title: plan.title }, "Game plan generated");
     stopHeartbeat();
     sseResult(res, { plan, engine, genre });
@@ -328,18 +341,20 @@ router.post("/games/plan/refine", async (req, res): Promise<void> => {
 
   try {
     const anthropic = new Anthropic({ apiKey, timeout: 35_000 });
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1200,
-      temperature: 0.7,
-      system: REFINE_SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: `CURRENT PLAN:\n${planJson}\n\nUSER FEEDBACK:\n${feedback}`,
-      }],
+    const plan = await withRetry(async () => {
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1200,
+        temperature: 0.7,
+        system: REFINE_SYSTEM_PROMPT,
+        messages: [{
+          role: "user",
+          content: `CURRENT PLAN:\n${planJson}\n\nUSER FEEDBACK:\n${feedback}`,
+        }],
+      });
+      const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+      return parsePlanJson(text);
     });
-    const text = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
-    const plan = parsePlanJson(text);
     req.log.info({ title: plan.title }, "Game plan refined");
     stopHeartbeat();
     sseResult(res, { plan });
