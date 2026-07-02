@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -27,6 +27,12 @@ export const gamesTable = pgTable("games", {
   gameContext: text("game_context"),
   /** 'complete' | 'sprites_pending' — set to sprites_pending when game saves without sprites */
   generationStatus: text("generation_status").notNull().default("complete"),
+  /** Total number of times this game has been played (≥10 s) */
+  playCount: integer("play_count").notNull().default(0),
+  /** Number of 1–10 ratings received */
+  ratingCount: integer("rating_count").notNull().default(0),
+  /** Average of all ratings (null if no ratings yet) */
+  averageRating: real("average_rating"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -1,19 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useListPublicGames, getListPublicGamesQueryKey } from "@workspace/api-client-react";
+import type { ListPublicGamesParams } from "@workspace/api-client-react";
 import { GAME_GENRES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import GameCard from "@/components/GameCard";
-import { Search, Compass, Loader2 } from "lucide-react";
-import { useDebounce } from "@/hooks/use-debounce"; // Will create this
+import { Search, Compass, Loader2, Flame, TrendingUp, Star, Clock } from "lucide-react";
+import { useDebounce } from "@/hooks/use-debounce";
+
+type SortOption = NonNullable<ListPublicGamesParams["sort"]>;
+
+const SORT_OPTIONS: { value: SortOption; label: string; icon: React.ReactNode }[] = [
+  { value: "newest", label: "Newest", icon: <Clock className="w-3.5 h-3.5" /> },
+  { value: "trending", label: "Trending", icon: <Flame className="w-3.5 h-3.5" /> },
+  { value: "popular", label: "Most Played", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+  { value: "top_rated", label: "Top Rated", icon: <Star className="w-3.5 h-3.5" /> },
+];
 
 export default function Explore() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 500);
   const [genre, setGenre] = useState<string>("");
+  const [sort, setSort] = useState<SortOption>("newest");
+
+  const queryParams = {
+    search: debouncedSearch || undefined,
+    genre: genre || undefined,
+    sort,
+  };
 
   const { data: games, isLoading } = useListPublicGames(
-    { search: debouncedSearch || undefined, genre: genre || undefined },
-    { query: { queryKey: getListPublicGamesQueryKey({ search: debouncedSearch || undefined, genre: genre || undefined }) } }
+    queryParams,
+    { query: { queryKey: getListPublicGamesQueryKey(queryParams) } }
   );
 
   return (
@@ -24,6 +41,25 @@ export default function Explore() {
           Explore
         </h1>
         <p className="text-muted-foreground text-lg">Discover games created by the community.</p>
+      </div>
+
+      {/* Sort tabs */}
+      <div className="flex gap-1.5 mb-4 bg-card border border-border rounded-xl p-1 w-fit">
+        {SORT_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setSort(opt.value)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
+              sort === opt.value
+                ? "bg-primary/20 text-primary shadow-[0_0_8px_rgba(34,197,94,0.15)]"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+            )}
+          >
+            {opt.icon}
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">

@@ -50,6 +50,7 @@ import {
   RotateCcw,
   Redo2,
 } from "lucide-react";
+import ExportPanel from "@/components/ExportPanel";
 import { toast } from "@/hooks/use-toast";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -803,6 +804,7 @@ export default function GameEditor() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [leftTab, setLeftTab] = useState<LeftTab>("chat");
+  const [showExportPanel, setShowExportPanel] = useState(false);
 
   // Background sprite generation state
   const [isGeneratingSprites, setIsGeneratingSprites] = useState(false);
@@ -1280,10 +1282,10 @@ export default function GameEditor() {
 
           {/* Action buttons */}
           <button
-            onClick={handleExportHtml}
+            onClick={() => setShowExportPanel(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-[12px] text-white/40 hover:text-white/60 transition-colors"
-            title="Download as HTML file"
-            aria-label="Export game as HTML"
+            title="Export game"
+            aria-label="Export game"
           >
             <Download className="w-3.5 h-3.5" />
             Export
@@ -1343,6 +1345,17 @@ export default function GameEditor() {
           </div>
         )}
       </div>
+
+      {/* ── Export panel ───────────────────────────────────────────────────────── */}
+      {showExportPanel && (
+        <ExportPanel
+          gameCode={code}
+          gameTitle={title}
+          slug={game?.slug}
+          isPublished={game?.status === "published"}
+          onClose={() => setShowExportPanel(false)}
+        />
+      )}
 
       {/* ── Fullscreen overlay ─────────────────────────────────────────────────── */}
       {isFullscreen && (

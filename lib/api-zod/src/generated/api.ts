@@ -88,6 +88,7 @@ export const listPublicGamesQueryOffsetDefault = 0;
 export const ListPublicGamesQueryParams = zod.object({
   "genre": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
+  "sort": zod.enum(['newest', 'popular', 'top_rated', 'trending']).optional(),
   "limit": zod.coerce.number().default(listPublicGamesQueryLimitDefault),
   "offset": zod.coerce.number().default(listPublicGamesQueryOffsetDefault)
 })
@@ -99,8 +100,12 @@ export const ListPublicGamesResponseItem = zod.object({
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
+  "playCount": zod.number(),
+  "ratingCount": zod.number(),
+  "averageRating": zod.number().nullable(),
   "authorId": zod.string(),
   "authorName": zod.string(),
+  "coverImageUrl": zod.string().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 export const ListPublicGamesResponse = zod.array(ListPublicGamesResponseItem)
@@ -319,11 +324,47 @@ export const GetGameBySlugResponse = zod.object({
   "status": zod.enum(['draft', 'published']),
   "slug": zod.string(),
   "likesCount": zod.number(),
+  "playCount": zod.number(),
+  "ratingCount": zod.number(),
+  "averageRating": zod.number().nullable(),
   "authorId": zod.string(),
   "authorName": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 })
+
+// ── Play & Reviews ────────────────────────────────────────────────────────────
+
+export const RecordPlayParams = zod.object({ "id": zod.coerce.number() })
+export const RecordPlayResponse = zod.object({ "playCount": zod.number() })
+
+export const CreateReviewParams = zod.object({ "id": zod.coerce.number() })
+export const CreateReviewBody = zod.object({
+  "rating": zod.number().int().min(1).max(10),
+  "body": zod.string().max(500).optional(),
+})
+export const ReviewObject = zod.object({
+  "id": zod.number(),
+  "gameId": zod.number(),
+  "authorId": zod.string(),
+  "authorName": zod.string(),
+  "rating": zod.number(),
+  "body": zod.string().nullable(),
+  "replyText": zod.string().nullable(),
+  "repliedAt": zod.coerce.date().nullable(),
+  "helpfulCount": zod.number(),
+  "isFlagged": zod.number(),
+  "isHelpful": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+})
+export const GetReviewsParams = zod.object({ "id": zod.coerce.number() })
+export const GetReviewsResponse = zod.array(ReviewObject)
+
+export const CreateReplyParams = zod.object({ "id": zod.coerce.number(), "reviewId": zod.coerce.number() })
+export const CreateReplyBody = zod.object({ "replyText": zod.string().min(1).max(500) })
+export const MarkHelpfulParams = zod.object({ "id": zod.coerce.number(), "reviewId": zod.coerce.number() })
+export const MarkHelpfulResponse = zod.object({ "helpful": zod.boolean(), "helpfulCount": zod.number() })
+export const FlagReviewParams = zod.object({ "id": zod.coerce.number(), "reviewId": zod.coerce.number() })
 
 
 /**

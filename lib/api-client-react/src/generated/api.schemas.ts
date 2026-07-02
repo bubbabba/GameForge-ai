@@ -128,9 +128,46 @@ export interface GameSummary {
   status: GameSummaryStatus;
   slug: string;
   likesCount: number;
+  playCount: number;
+  ratingCount: number;
+  averageRating: number | null;
   authorId: string;
   authorName: string;
+  coverImageUrl?: string | null;
   createdAt: string;
+}
+
+export interface Review {
+  id: number;
+  gameId: number;
+  authorId: string;
+  authorName: string;
+  rating: number;
+  body: string | null;
+  replyText: string | null;
+  repliedAt: string | null;
+  helpfulCount: number;
+  isFlagged: number;
+  isHelpful: boolean;
+  createdAt: string;
+}
+
+export interface CreateReviewBody {
+  rating: number;
+  body?: string;
+}
+
+export interface CreateReplyBody {
+  replyText: string;
+}
+
+export interface RecordPlayResult {
+  playCount: number;
+}
+
+export interface MarkHelpfulResult {
+  helpful: boolean;
+  helpfulCount: number;
 }
 
 export interface GameInput {
@@ -186,6 +223,7 @@ export interface UserProfile {
 export type ListPublicGamesParams = {
 genre?: string;
 search?: string;
+sort?: 'newest' | 'popular' | 'top_rated' | 'trending';
 limit?: number;
 offset?: number;
 };

@@ -10,3 +10,4 @@
 - [SSE resilience pattern](sse-resilience.md) — generate + chat routes use SSE with 10s heartbeats; server timeout 180s; Anthropic timeout 120s; streamPost() client utility; useGenerateGame/useChatEditGame removed from frontend.
 - [Sprite generation pipeline](sprite-generation-pipeline.md) — auto-generates pixel art sprites before Phaser build step; objectPath in DB, absolute URL in game code; graceful per-element fallback; psql migration required for sprites_json column.
 - [Game plan approval flow](game-plan-approval.md) — Two-step create: plan→approve/adjust→generate. parsePlanJson uses regex extraction; approved plan replaces GDD call; stale-plan warning when prompt changes post-plan.
+- [Play count + ratings + export](community-features.md) — play_count/rating_count/average_rating on gamesTable; reviews + review_helpful tables; IP+gameId dedup in memory (5min TTL); tx-wrapped rating updates; IDOR fix scopes reply update to gameId+reviewId.

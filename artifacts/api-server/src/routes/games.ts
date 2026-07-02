@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { getAuth } from "@clerk/express";
 import { eq, and, desc, ilike, sql } from "drizzle-orm";
-import { db, gamesTable, likesTable } from "@workspace/db";
+import { db, gamesTable, likesTable, reviewsTable, reviewHelpfulTable } from "@workspace/db";
 import {
   GenerateGameBody,
   SaveGameBody,
@@ -27,6 +27,24 @@ import { generateAndSaveCover } from "../lib/imageGeneration";
 const router: IRouter = Router();
 
 const MAX_PROMPT_LENGTH = 4000;
+
+// ── Play-count server-side dedup (IP + gameId, 5-minute TTL) ─────────────────
+const playedRecently = new Map<string, number>();
+const PLAY_TTL_MS = 5 * 60 * 1000;
+
+function throttlePlay(ip: string, gameId: number): boolean {
+  const key = `${ip}:${gameId}`;
+  const last = playedRecently.get(key);
+  const now = Date.now();
+  if (last && now - last < PLAY_TTL_MS) return false;
+  playedRecently.set(key, now);
+  if (playedRecently.size > 5000) {
+    for (const [k, t] of playedRecently) {
+      if (now - t > PLAY_TTL_MS) playedRecently.delete(k);
+    }
+  }
+  return true;
+}
 
 // ── SSE helpers ───────────────────────────────────────────────────────────────
 // Switch a response to Server-Sent Events and keep the connection alive with
@@ -415,6 +433,32 @@ router.post("/games/generate", async (req, res): Promise<void> => {
 
 // ── Public Game Listing ───────────────────────────────────────────────────
 
+// ── Record Play ──────────────────────────────────────────────────────────────
+
+router.post("/games/:id/play", async (req: any, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid game id" }); return; }
+
+  // Server-side dedup: one count per IP per game per 5 minutes
+  const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ?? req.socket.remoteAddress ?? "unknown";
+  if (!throttlePlay(ip, id)) {
+    // Already counted recently — return current count without incrementing
+    const [row] = await db.select({ playCount: gamesTable.playCount }).from(gamesTable).where(eq(gamesTable.id, id));
+    res.json({ playCount: row?.playCount ?? 0 });
+    return;
+  }
+
+  await db
+    .update(gamesTable)
+    .set({ playCount: sql`${gamesTable.playCount} + 1` })
+    .where(and(eq(gamesTable.id, id), eq(gamesTable.status, "published")));
+  const [row] = await db
+    .select({ playCount: gamesTable.playCount })
+    .from(gamesTable)
+    .where(eq(gamesTable.id, id));
+  res.json({ playCount: row?.playCount ?? 0 });
+});
+
 router.get("/games/public", async (req, res): Promise<void> => {
   const params = ListPublicGamesQueryParams.safeParse(req.query);
   if (!params.success) {
@@ -422,9 +466,24 @@ router.get("/games/public", async (req, res): Promise<void> => {
     return;
   }
 
-  const { genre, search, limit = 20, offset = 0 } = params.data;
+  const { genre, search, sort = "newest", limit = 20, offset = 0 } = params.data;
 
-  let query = db
+  const whereClause =
+    genre && search
+      ? and(eq(gamesTable.status, "published"), eq(gamesTable.genre, genre), ilike(gamesTable.title, `%${search}%`))
+      : genre
+      ? and(eq(gamesTable.status, "published"), eq(gamesTable.genre, genre))
+      : search
+      ? and(eq(gamesTable.status, "published"), ilike(gamesTable.title, `%${search}%`))
+      : eq(gamesTable.status, "published");
+
+  const orderExpr =
+    sort === "popular" ? [desc(gamesTable.playCount), desc(gamesTable.createdAt)]
+    : sort === "top_rated" ? [sql`average_rating DESC NULLS LAST`, desc(gamesTable.ratingCount), desc(gamesTable.createdAt)]
+    : sort === "trending" ? [sql`(play_count * 10 + likes_count * 3) DESC`, desc(gamesTable.createdAt)]
+    : [desc(gamesTable.createdAt)]; // newest default
+
+  const games = await db
     .select({
       id: gamesTable.id,
       title: gamesTable.title,
@@ -432,30 +491,20 @@ router.get("/games/public", async (req, res): Promise<void> => {
       status: gamesTable.status,
       slug: gamesTable.slug,
       likesCount: gamesTable.likesCount,
+      playCount: gamesTable.playCount,
+      ratingCount: gamesTable.ratingCount,
+      averageRating: gamesTable.averageRating,
       authorId: gamesTable.authorId,
       authorName: gamesTable.authorName,
       createdAt: gamesTable.createdAt,
       coverImageUrl: gamesTable.coverImageUrl,
     })
     .from(gamesTable)
-    .where(
-      genre && search
-        ? and(
-            eq(gamesTable.status, "published"),
-            eq(gamesTable.genre, genre),
-            ilike(gamesTable.title, `%${search}%`),
-          )
-        : genre
-        ? and(eq(gamesTable.status, "published"), eq(gamesTable.genre, genre))
-        : search
-        ? and(eq(gamesTable.status, "published"), ilike(gamesTable.title, `%${search}%`))
-        : eq(gamesTable.status, "published"),
-    )
-    .orderBy(desc(gamesTable.createdAt))
+    .where(whereClause)
+    .orderBy(...orderExpr)
     .limit(limit)
     .offset(offset);
 
-  const games = await query;
   res.json(games);
 });
 

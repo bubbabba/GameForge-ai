@@ -16,6 +16,9 @@ interface GameCardProps {
     status: string;
     slug?: string;
     likesCount: number;
+    playCount?: number;
+    ratingCount?: number;
+    averageRating?: number | null;
     authorName: string;
     coverImageUrl?: string | null;
   };
@@ -110,10 +113,19 @@ export default function GameCard({ game, variant = "public", onDelete, onPublish
                   <Play className="w-4 h-4 mr-2" /> Play
                 </Button>
               </Link>
-              <div className="flex items-center gap-1.5 px-3 h-10 bg-white/5 rounded-md text-sm font-medium text-muted-foreground border border-white/5">
-                <Heart className="w-4 h-4" />
-                <span>{game.likesCount || 0}</span>
-              </div>
+              {/* Plays badge */}
+              {(game.playCount ?? 0) > 0 && (
+                <div className="flex items-center gap-1 px-2.5 h-10 bg-white/5 rounded-md text-xs font-medium text-muted-foreground border border-white/5 shrink-0">
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{game.playCount! >= 1000 ? `${(game.playCount! / 1000).toFixed(1)}k` : game.playCount}</span>
+                </div>
+              )}
+              {/* Rating badge */}
+              {game.averageRating != null && (game.ratingCount ?? 0) > 0 && (
+                <div className="flex items-center gap-1 px-2.5 h-10 bg-yellow-400/10 rounded-md text-xs font-bold text-yellow-400 border border-yellow-400/10 shrink-0">
+                  ★ {game.averageRating.toFixed(1)}
+                </div>
+              )}
             </>
           ) : variant === "draft" ? (
             <>
